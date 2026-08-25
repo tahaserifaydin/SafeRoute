@@ -1,0 +1,692 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import RouteMap from "./components/RouteMap";
+import SearchField from "./components/SearchField";
+import RouteCards from "./components/RouteCards";
+import SegmentInspector, { ScoreLegend } from "./components/SegmentInspector";
+import NavBanner from "./components/NavBanner";
+import EmergencyPanel from "./components/EmergencyPanel";
+import { HavensList, ReportForm, SavedRoutes, StepsList } from "./components/Panels";
+import {
+  api,
+  decodeStateFromUrl,
+  deleteSavedRoute,
+  encodeStateToUrl,
+  loadSavedRoutes,
+  saveRoute,
+} from "./lib/api";
+import {
+  ARRIVAL_RADIUS_M,
+  SAFETY_PREF_LABELS,
+  SIM_SPEED_KMH,
+  SIM_TICK_MS,
+  TIME_LABELS,
+  TIME_RANGES,
+  haversineM,
+  interpolateAlongRoute,
+  localTimeProfile,
+} from "./lib/constants";
+import "./App.css";
+
+const urlState = decodeStateFromUrl();
+
+export default function App() {
+  // --- Bölge / zaman ---
+  const [regions, setRegions] = useState([]);
+  const [region, setRegion] = useState(urlState.region || "eindhoven");
+  const [timeMode, setTimeMode] = useState(urlState.timeMode || "auto");
+  const [autoTimeProfile, setAutoTimeProfile] = useState(localTimeProfile());
+  const [flyTrigger, setFlyTrigger] = useState(0);
+  const [fitTrigger, setFitTrigger] = useState(0);
+
+  // --- Rota girdileri ---
+  const [start, setStart] = useState(urlState.start);
+  const [end, setEnd] = useState(urlState.end);
+  const [startQuery, setStartQuery] = useState("");
+  const [endQuery, setEndQuery] = useState("");
+  const [resolvingStart, setResolvingStart] = useState(false);
+  const [resolvingEnd, setResolvingEnd] = useState(false);
+  const [safetyPref, setSafetyPref] = useState(urlState.safetyPref ?? 0.6);
+  const [accessibleMode, setAccessibleMode] = useState(false);
+
+  // --- Sonuç ---
+  const [result, setResult] = useState(null);
+  const [selectedRoute, setSelectedRoute] = useState("safe");
+  const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("");
+  const [error, setError] = useState(null);
+  const [inspectedSegment, setInspectedSegment] = useState(null);
+  const requestId = useRef(0);
+
+  // --- Katmanlar ---
+  const [havens, setHavens] = useState([]);
+  const [showHavens, setShowHavens] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [heatmapBands, setHeatmapBands] = useState(null);
+  const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [reports, setReports] = useState([]);
+  const [reportMode, setReportMode] = useState(false);
+  const [pendingReport, setPendingReport] = useState(null);
+  const [emergencyOpen, setEmergencyOpen] = useState(false);
+  const [savedRoutes, setSavedRoutes] = useState(loadSavedRoutes);
+  const [toast, setToast] = useState(null);
+
+  // --- Navigasyon ---
+  const [navActive, setNavActive] = useState(false);
+  const [navIsSim, setNavIsSim] = useState(false);
+  const [userPos, setUserPos] = useState(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const watchIdRef = useRef(null);
+  const simIntervalRef = useRef(null);
+  const simProgressRef = useRef(0);
+
+  // --- Mobil düzen ---
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const effectiveTime = timeMode === "auto" ? autoTimeProfile : timeMode;
+  const currentRegion = regions.find((r) => r.id === region);
+  const active = result ? result[selectedRoute] : null;
+
+  const showToast = useCallback((msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2600);
+  }, []);
+
+  // --- Başlangıç verileri ---
+  useEffect(() => {
+    api
+      .regions()
+      .then((d) => {
+        setRegions(d.regions || []);
+        setAutoTimeProfile(d.currentTimeProfile || localTimeProfile());
+      })
+      .catch(() => setError("Sunucuya bağlanılamadı. Arka uç çalışıyor mu?"));
+  }, []);
+
+  useEffect(() => {
+    api
+      .reports(region)
+      .then((d) => setReports(d.reports || []))
+      .catch(() => setReports([]));
+  }, [region]);
+
+  // --- Nokta seçilince adresini çöz (koordinat yerine sokak adı göster) ---
+  const resolveLabel = useCallback(async (point, setQuery, setBusy) => {
+    setBusy(true);
+    setQuery("Adres çözümleniyor…");
+    try {
+      const { label } = await api.reverse(point.lat, point.lng);
+      setQuery(label);
+    } catch {
+      setQuery(`${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  // URL'den gelen noktaların adreslerini bir kez çöz
+  useEffect(() => {
+    if (urlState.start) resolveLabel(urlState.start, setStartQuery, setResolvingStart);
+    if (urlState.end) resolveLabel(urlState.end, setEndQuery, setResolvingEnd);
+  }, [resolveLabel]);
+
+  // --- Rota hesapla ---
+  useEffect(() => {
+    if (!start || !end || !effectiveTime) return;
+    const myId = ++requestId.current;
+    setLoading(true);
+    setError(null);
+    setLoadingMsg("Rota hesaplanıyor…");
+    // İlk istekte sunucu grafiği kuruyor olabilir; kullanıcıyı bilgilendir
+    const slowTimer = setTimeout(() => {
+      if (myId === requestId.current) setLoadingMsg("Bu zaman dilimi ilk kez kullanılıyor, yol ağı hazırlanıyor…");
+    }, 1200);
+
+    api
+      .route({ start, end, region, time: effectiveTime, safetyPref, accessible: accessibleMode })
+      .then((data) => {
+        if (myId !== requestId.current) return;
+        setResult(data);
+        setSelectedRoute("safe");
+        setInspectedSegment(null);
+        setFitTrigger((t) => t + 1);
+      })
+      .catch((err) => {
+        if (myId !== requestId.current) return;
+        setError(err.message);
+        setResult(null);
+      })
+      .finally(() => {
+        clearTimeout(slowTimer);
+        if (myId === requestId.current) setLoading(false);
+      });
+
+    return () => clearTimeout(slowTimer);
+  }, [start, end, region, effectiveTime, safetyPref, accessibleMode]);
+
+  // --- Güvenli noktalar (saate duyarlı) ---
+  useEffect(() => {
+    if (!showHavens) return;
+    const ref = userPos || start || (currentRegion ? { lat: currentRegion.center[0], lng: currentRegion.center[1] } : null);
+    if (!ref) return;
+    api
+      .safeHavens({ lat: ref.lat, lng: ref.lng, region, time: effectiveTime })
+      .then((d) => setHavens(d.havens || []))
+      .catch(() => setHavens([]));
+  }, [showHavens, userPos, start, region, effectiveTime, currentRegion]);
+
+  // --- Şehir geneli ısı haritası ---
+  useEffect(() => {
+    if (!showHeatmap || !effectiveTime) return;
+    setHeatmapLoading(true);
+    api
+      .heatmap(region, effectiveTime)
+      .then((d) => setHeatmapBands(d.bands || []))
+      .catch(() => setHeatmapBands(null))
+      .finally(() => setHeatmapLoading(false));
+  }, [showHeatmap, region, effectiveTime]);
+
+  // --- Harita tıklaması ---
+  const handleMapClick = useCallback(
+    (point) => {
+      if (reportMode) {
+        setPendingReport({ lat: point.lat, lng: point.lng, type: "unsafe", note: "" });
+        if (isMobile) setSheetOpen(true);
+        return;
+      }
+      setInspectedSegment(null);
+      setError(null);
+      if (!start) {
+        setStart(point);
+        resolveLabel(point, setStartQuery, setResolvingStart);
+        setEnd(null);
+        setEndQuery("");
+        setResult(null);
+      } else if (!end) {
+        setEnd(point);
+        resolveLabel(point, setEndQuery, setResolvingEnd);
+      } else {
+        setStart(point);
+        resolveLabel(point, setStartQuery, setResolvingStart);
+        setEnd(null);
+        setEndQuery("");
+        setResult(null);
+      }
+    },
+    [reportMode, start, end, isMobile, resolveLabel]
+  );
+
+  const handleSegmentClick = useCallback(
+    (seg) => {
+      setInspectedSegment(seg);
+      if (isMobile) setSheetOpen(true);
+    },
+    [isMobile]
+  );
+
+  // --- Navigasyon ---
+  const stopNav = useCallback(() => {
+    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+    watchIdRef.current = null;
+    if (simIntervalRef.current != null) clearInterval(simIntervalRef.current);
+    simIntervalRef.current = null;
+    setNavActive(false);
+    setNavIsSim(false);
+    setUserPos(null);
+  }, []);
+
+  useEffect(() => () => stopNav(), [stopNav]);
+
+  const startNav = () => {
+    if (!active) return;
+    if (!navigator.geolocation) {
+      setError("Bu tarayıcıda konum servisi kullanılamıyor.");
+      return;
+    }
+    setError(null);
+    setStepIndex(0);
+    setNavActive(true);
+    setNavIsSim(false);
+    if (isMobile) setSheetOpen(false);
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => setError("Konum alınamadı: " + err.message),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+    );
+  };
+
+  const startSim = () => {
+    if (!active) return;
+    setError(null);
+    setStepIndex(0);
+    setNavActive(true);
+    setNavIsSim(true);
+    if (isMobile) setSheetOpen(false);
+    simProgressRef.current = 0;
+    const coords = active.route.geometry.coordinates;
+    const kmPerTick = (SIM_SPEED_KMH / 3600) * (SIM_TICK_MS / 1000);
+    simIntervalRef.current = setInterval(() => {
+      simProgressRef.current += kmPerTick;
+      setUserPos(interpolateAlongRoute(coords, simProgressRef.current));
+      if (simProgressRef.current >= active.distanceKm) {
+        clearInterval(simIntervalRef.current);
+        simIntervalRef.current = null;
+      }
+    }, SIM_TICK_MS);
+  };
+
+  // Konum ilerledikçe bir sonraki adıma otomatik geç
+  useEffect(() => {
+    if (!navActive || !userPos || !active) return;
+    if (stepIndex >= active.steps.length - 1) return;
+    const next = active.steps[stepIndex + 1];
+    if (!next?.at) return;
+    if (haversineM(userPos, { lng: next.at[0], lat: next.at[1] }) < ARRIVAL_RADIUS_M) {
+      setStepIndex((i) => Math.min(i + 1, active.steps.length - 1));
+    }
+  }, [userPos, navActive, active, stepIndex]);
+
+  const currentStep = active && navActive ? active.steps[stepIndex] : null;
+  const nextStep = active && navActive ? active.steps[stepIndex + 1] : null;
+  const liveDistance =
+    nextStep?.at && userPos ? haversineM(userPos, { lng: nextStep.at[0], lat: nextStep.at[1] }) : null;
+
+  // Navigasyon sırasında bulunulan parçanın skoru
+  const currentScore = useMemo(() => {
+    if (!navActive || !userPos || !active?.segments?.length) return null;
+    let best = null;
+    let bestDist = Infinity;
+    for (const seg of active.segments) {
+      for (const [lng, lat] of seg.coordinates) {
+        const d = haversineM(userPos, { lat, lng });
+        if (d < bestDist) {
+          bestDist = d;
+          best = seg;
+        }
+      }
+    }
+    return bestDist < 60 ? best?.score ?? null : null;
+  }, [navActive, userPos, active]);
+
+  // --- Eylemler ---
+  const clearAll = () => {
+    stopNav();
+    setStart(null);
+    setEnd(null);
+    setStartQuery("");
+    setEndQuery("");
+    setResult(null);
+    setError(null);
+    setInspectedSegment(null);
+    setPendingReport(null);
+    setReportMode(false);
+  };
+
+  const submitReport = async () => {
+    if (!pendingReport) return;
+    try {
+      const data = await api.addReport({ ...pendingReport, region });
+      setReports((prev) => [...prev, data.report]);
+      setPendingReport(null);
+      setReportMode(false);
+      showToast("Rapor kaydedildi, teşekkürler.");
+      if (start && end) setSafetyPref((p) => p); // rota yeniden hesaplansın diye tetikleyici
+      setFitTrigger((t) => t);
+    } catch (err) {
+      setError("Rapor gönderilemedi: " + err.message);
+    }
+  };
+
+  const confirmReport = async (id) => {
+    try {
+      await api.confirmReport(id);
+      const d = await api.reports(region);
+      setReports(d.reports || []);
+      showToast("Teyidin kaydedildi.");
+    } catch (err) {
+      setError("Teyit gönderilemedi: " + err.message);
+    }
+  };
+
+  const shareLink = async () => {
+    const url = encodeStateToUrl({ start, end, region, timeMode, safetyPref });
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Bağlantı kopyalandı.");
+    } catch {
+      window.history.replaceState({}, "", url);
+      showToast("Bağlantı adres çubuğunda.");
+    }
+  };
+
+  const doSaveRoute = () => {
+    if (!start || !end) return;
+    const name = window.prompt("Bu rotaya bir ad ver:", `${startQuery.split(",")[0]} → ${endQuery.split(",")[0]}`);
+    if (!name) return;
+    const entry = {
+      id: `${start.lat},${start.lng}-${end.lat},${end.lng}`,
+      name,
+      start,
+      end,
+      region,
+      startLabel: startQuery.split(",")[0],
+      endLabel: endQuery.split(",")[0],
+    };
+    setSavedRoutes(saveRoute(entry));
+    showToast("Rota kaydedildi.");
+  };
+
+  const loadRoute = (r) => {
+    setRegion(r.region);
+    setStart(r.start);
+    setEnd(r.end);
+    setStartQuery(r.startLabel);
+    setEndQuery(r.endLabel);
+    if (isMobile) setSheetOpen(true);
+  };
+
+  const switchRegion = (id) => {
+    if (id === region) return;
+    setRegion(id);
+    clearAll();
+    setFlyTrigger((t) => t + 1);
+  };
+
+  const regionList = regions.length
+    ? regions
+    : [
+        { id: "eindhoven", label: "Eindhoven" },
+        { id: "nuenen", label: "Nuenen" },
+      ];
+
+  return (
+    <div className={`app ${isMobile ? "mobile" : ""}`}>
+      <aside className={`panel ${isMobile && !sheetOpen ? "collapsed" : ""} ${accessibleMode ? "a11y-mode" : ""}`}>
+        {isMobile && (
+          <button
+            className="sheet-handle"
+            onClick={() => setSheetOpen((v) => !v)}
+            aria-label={sheetOpen ? "Paneli küçült" : "Paneli aç"}
+          >
+            <span />
+          </button>
+        )}
+
+        <div className="panel-scroll">
+          <header className="brand">
+            <h1>SafeRoute</h1>
+            <p>Güvenli yaya navigasyonu</p>
+          </header>
+
+          {navActive ? (
+            <NavBanner
+              currentStep={currentStep}
+              nextStep={nextStep}
+              liveDistance={liveDistance}
+              onStop={stopNav}
+              currentScore={currentScore}
+              isSim={navIsSim}
+            />
+          ) : (
+            <>
+              <div className="segmented" role="group" aria-label="Bölge">
+                {regionList.map((r) => (
+                  <button
+                    key={r.id}
+                    className={`seg-btn ${region === r.id ? "active" : ""}`}
+                    onClick={() => switchRegion(r.id)}
+                    aria-pressed={region === r.id}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="time-switch" role="group" aria-label="Zaman dilimi">
+                <button
+                  className={`time-btn ${timeMode === "auto" ? "active" : ""}`}
+                  onClick={() => setTimeMode("auto")}
+                >
+                  Şimdi · {TIME_LABELS[autoTimeProfile]}
+                </button>
+                {Object.entries(TIME_LABELS).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={`time-btn ${timeMode === key ? "active" : ""}`}
+                    onClick={() => setTimeMode(key)}
+                    title={TIME_RANGES[key]}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <SearchField
+                placeholder="Nereden"
+                value={startQuery}
+                onChange={setStartQuery}
+                dotClass="dot-start"
+                region={region}
+                busy={resolvingStart}
+                onSelect={(s) => {
+                  if (!s) {
+                    setStart(null);
+                    setResult(null);
+                    return;
+                  }
+                  setStart({ lat: s.lat, lng: s.lng });
+                  setStartQuery(s.label);
+                }}
+              />
+              <SearchField
+                placeholder="Nereye"
+                value={endQuery}
+                onChange={setEndQuery}
+                dotClass="dot-end"
+                region={region}
+                busy={resolvingEnd}
+                onSelect={(s) => {
+                  if (!s) {
+                    setEnd(null);
+                    setResult(null);
+                    return;
+                  }
+                  setEnd({ lat: s.lat, lng: s.lng });
+                  setEndQuery(s.label);
+                }}
+              />
+
+              <div className="slider-row">
+                <label htmlFor="safety-pref">
+                  Güvenlik önceliği: <b>{SAFETY_PREF_LABELS[Math.round(safetyPref * 4)]}</b>
+                </label>
+                <input
+                  id="safety-pref"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.25"
+                  value={safetyPref}
+                  onChange={(e) => setSafetyPref(parseFloat(e.target.value))}
+                  // Panelde kaydırırken tekerleğin değeri değiştirmesini engelle
+                  onWheel={(e) => e.currentTarget.blur()}
+                />
+                <div className="slider-hint">Yüksek = daha uzun ama daha güvenli rotaya razıyım</div>
+              </div>
+
+              <button
+                className={`a11y-toggle ${accessibleMode ? "active" : ""}`}
+                onClick={() => setAccessibleMode((v) => !v)}
+                aria-pressed={accessibleMode}
+              >
+                <span aria-hidden="true">♿</span>
+                <span>
+                  <b>Erişilebilir Mod</b>
+                  <small>Merdivenden kaçın, düz/kaplamalı yolları tercih et</small>
+                </span>
+                <span className="a11y-switch" aria-hidden="true" />
+              </button>
+
+              {result?.[selectedRoute]?.hasSteps && accessibleMode && (
+                <div className="status error">
+                  ⚠️ Bu rota kaçınılamayan kısa bir merdiven içeriyor.
+                </div>
+              )}
+
+              <div className="toolbar">
+                <button
+                  className={`tool-btn ${showHavens ? "active" : ""}`}
+                  onClick={() => setShowHavens((v) => !v)}
+                >
+                  🛟 Güvenli nokta
+                </button>
+                <button
+                  className={`tool-btn ${showHeatmap ? "active" : ""}`}
+                  onClick={() => setShowHeatmap((v) => !v)}
+                >
+                  {heatmapLoading ? <span className="field-spinner" aria-hidden="true" /> : "🗺️"} Isı haritası
+                </button>
+                <button
+                  className={`tool-btn ${reportMode ? "active" : ""}`}
+                  onClick={() => {
+                    setReportMode((v) => !v);
+                    setPendingReport(null);
+                  }}
+                >
+                  ⚠️ Bildir
+                </button>
+                <button className="tool-btn emergency" onClick={() => setEmergencyOpen(true)}>
+                  🆘 Acil Durum
+                </button>
+                {result && (
+                  <>
+                    <button className="tool-btn" onClick={shareLink}>
+                      🔗 Paylaş
+                    </button>
+                    <button className="tool-btn" onClick={doSaveRoute}>
+                      ☆ Kaydet
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {emergencyOpen && <EmergencyPanel onClose={() => setEmergencyOpen(false)} />}
+
+              {reportMode && !pendingReport && (
+                <div className="status">Bildirmek istediğin noktaya haritada dokun.</div>
+              )}
+              {pendingReport && (
+                <ReportForm
+                  pending={pendingReport}
+                  onChange={setPendingReport}
+                  onSubmit={submitReport}
+                  onCancel={() => setPendingReport(null)}
+                />
+              )}
+
+              {loading && (
+                <div className="status loading">
+                  <span className="spinner" aria-hidden="true" />
+                  {loadingMsg}
+                </div>
+              )}
+              {error && <div className="status error">{error}</div>}
+
+              {!start && !reportMode && !loading && (
+                <div className="hint">Adres yaz ya da haritaya dokunarak başlangıç noktası seç.</div>
+              )}
+              {start && !end && !reportMode && !loading && (
+                <div className="hint">Şimdi de varış noktasını seç.</div>
+              )}
+
+              {result && (
+                <>
+                  <RouteCards result={result} selectedRoute={selectedRoute} onSelect={setSelectedRoute} />
+                  <div className="nav-buttons">
+                    <button className="btn-primary" onClick={startNav}>
+                      Navigasyonu başlat
+                    </button>
+                    <button className="btn-secondary" onClick={startSim}>
+                      Simülasyon (demo)
+                    </button>
+                  </div>
+                  <ScoreLegend />
+                  {inspectedSegment && (
+                    <SegmentInspector segment={inspectedSegment} onClose={() => setInspectedSegment(null)} />
+                  )}
+                  <StepsList steps={active.steps} activeIndex={-1} />
+                </>
+              )}
+
+              {showHavens && <HavensList havens={havens} timeLabel={TIME_LABELS[effectiveTime]} />}
+
+              <SavedRoutes
+                routes={savedRoutes}
+                onLoad={loadRoute}
+                onDelete={(id) => setSavedRoutes(deleteSavedRoute(id))}
+              />
+
+              {(start || end) && (
+                <button className="btn-ghost wide" onClick={clearAll}>
+                  Temizle
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </aside>
+
+      <main className="map-wrap">
+        <RouteMap
+          start={start}
+          end={end}
+          result={result}
+          activeRoute={active}
+          selectedRoute={selectedRoute}
+          onSelectRoute={setSelectedRoute}
+          onMapClick={handleMapClick}
+          onSegmentClick={handleSegmentClick}
+          userPos={userPos}
+          navActive={navActive}
+          regionCenter={currentRegion?.center}
+          flyTrigger={flyTrigger}
+          fitTrigger={fitTrigger}
+          layoutTrigger={`${sheetOpen}-${isMobile}`}
+          havens={havens}
+          showHavens={showHavens}
+          reports={reports}
+          onConfirmReport={confirmReport}
+          heatmapBands={showHeatmap ? heatmapBands : null}
+        />
+        {reportMode && <div className="map-mode-badge">Bildirme modu — haritaya dokun</div>}
+        {showHeatmap && (
+          <div className="heatmap-legend">
+            <span>{TIME_LABELS[effectiveTime]} — şehir geneli güvenlik skoru</span>
+            <div className="legend-scale">
+              {[
+                { c: "#dc2626", t: "0-34" },
+                { c: "#f97316", t: "35-49" },
+                { c: "#eab308", t: "50-64" },
+                { c: "#84cc16", t: "65-79" },
+                { c: "#16a34a", t: "80+" },
+              ].map((x) => (
+                <span key={x.t} className="legend-item">
+                  <i style={{ background: x.c }} />
+                  {x.t}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}

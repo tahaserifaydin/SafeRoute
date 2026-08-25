@@ -1,0 +1,20 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@turf/turf": "^7.4.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "geojson-path-finder": "^2.1.0",
+    "osmtogeojson": "^3.0.0-beta.5"
+  }
+}
