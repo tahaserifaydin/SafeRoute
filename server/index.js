@@ -118,17 +118,58 @@ function buildFinder(roadsScored, scoreField, alpha, regionId, accessible) {
 const MAX_CACHED_FINDERS = 3;
 const finderCache = new Map(); // "regionId:timeName" -> { fastFinder, safeFinder }
 
+// Üretimde bellek çok kısıtlı (ücretsiz barındırma ~512MB): tek bir PathFinder
+// grafiği bile ~150-200MB tutuyor. Geometriyi düşük toleransla basitleştirmek
+// (yayanın fark etmeyeceği ~3-5m) köşe noktası sayısını ~%40 azaltıp her grafiğin
+// maliyetini orantılı düşürür. SIMPLIFY_TOLERANCE=0 ile kapatılabilir.
+const SIMPLIFY_TOLERANCE = parseFloat(process.env.SIMPLIFY_TOLERANCE ?? "0.00003");
+
+function simplifyRoads(roadsScored) {
+  if (!SIMPLIFY_TOLERANCE) return roadsScored;
+  let before = 0,
+    after = 0;
+  for (const f of roadsScored.features) {
+    if (!f.geometry || f.geometry.type !== "LineString") continue;
+    before += f.geometry.coordinates.length;
+    if (f.geometry.coordinates.length > 3) {
+      f.geometry.coordinates = turf.simplify(turf.lineString(f.geometry.coordinates), {
+        tolerance: SIMPLIFY_TOLERANCE,
+        highQuality: false,
+      }).geometry.coordinates;
+    }
+    after += f.geometry.coordinates.length;
+  }
+  console.log(`  geometri basitleştirildi: ${before} -> ${after} koordinat (%${Math.round(100 * (1 - after / before))} azalma)`);
+  return roadsScored;
+}
+
+// PathFinder'ın kendi köşe kümesini kullanmak için tam bir grafik kurmak gerekirdi
+// (~150-200MB, sırf snap noktaları için). Bunun yerine yol geometrilerindeki
+// benzersiz koordinatları doğrudan çıkarıyoruz — PathFinder'ın kullandığı köşeler
+// zaten bu noktaların bir alt kümesidir, snap amacı için işlevsel olarak eşdeğerdir.
+function extractVertexPoints(roadsScored) {
+  const seen = new Set();
+  const points = [];
+  for (const f of roadsScored.features) {
+    if (!f.geometry || f.geometry.type !== "LineString") continue;
+    for (const c of f.geometry.coordinates) {
+      const key = `${c[0]},${c[1]}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      points.push(turf.point(c));
+    }
+  }
+  return turf.featureCollection(points);
+}
+
 function loadRegion(id, config) {
   console.log(`[${id}] Skorlanmış yol ağı yükleniyor...`);
   const dataDir = path.join(DATA_ROOT, config.dataDir);
-  const roadsScored = JSON.parse(fs.readFileSync(path.join(dataDir, "roads_scored.geojson")));
+  const roadsScored = simplifyRoads(JSON.parse(fs.readFileSync(path.join(dataDir, "roads_scored.geojson"))));
   const amenities = JSON.parse(fs.readFileSync(path.join(dataDir, "amenities.geojson")));
 
-  // Köşe noktaları (snap için) zaman profilinden bağımsız, bir kez hesaplanır.
-  const probeFinder = buildFinder(roadsScored, `safety_score_${TIME_PROFILES[0]}`, 0);
-  const vertexKeys = Object.keys(probeFinder.graph.vertices);
-  const vertexPoints = turf.featureCollection(vertexKeys.map((k) => turf.point(k.split(",").map(Number))));
-  console.log(`[${id}] Hazır: ${vertexKeys.length} köşe noktası.`);
+  const vertexPoints = extractVertexPoints(roadsScored);
+  console.log(`[${id}] Hazır: ${vertexPoints.features.length} köşe noktası.`);
 
   return {
     id,
@@ -142,15 +183,18 @@ function loadRegion(id, config) {
   };
 }
 
+// Bölge verisi de tembel yüklenir: kullanıcı hiç Nuenen'e geçmezse o bölgenin
+// yol ağı/işletmeleri belleğe hiç alınmaz. Bellek kısıtlı ücretsiz barındırmada
+// (~512MB) her MB önemli.
 const regionData = {};
-for (const [id, config] of Object.entries(REGIONS)) {
-  regionData[id] = loadRegion(id, config);
-}
-console.log("Tüm bölgeler hazır (grafikler ilk istekte kurulacak).");
-
 function getRegion(id) {
-  return regionData[id] || regionData.eindhoven;
+  const key = REGIONS[id] ? id : "eindhoven";
+  if (!regionData[key]) {
+    regionData[key] = loadRegion(key, REGIONS[key]);
+  }
+  return regionData[key];
 }
+console.log("Sunucu hazır (bölge verisi ilk istekte yüklenecek).");
 
 function getFinder(region, timeName, alpha, accessible = false) {
   const key = `${region.id}:${timeName}:${alpha}:${accessible ? "a" : "n"}`;
@@ -398,7 +442,9 @@ app.use(express.static(CLIENT_DIR));
 
 app.get("/api/regions", (_req, res) => {
   res.json({
-    regions: Object.values(regionData).map((r) => ({ id: r.id, label: r.label, center: r.center, bbox: r.bbox })),
+    // Bölge verisi tembel yüklendiği için burada statik yapılandırma kullanılır;
+    // bbox frontend'de kullanılmıyor, gereksiz yükleme tetiklemeyelim.
+    regions: Object.entries(REGIONS).map(([id, r]) => ({ id, label: r.label, center: r.center })),
     currentTimeProfile: currentTimeProfile(),
   });
 });

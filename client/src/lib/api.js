@@ -1,3 +1,5 @@
+import { engine } from "../engine/engineClient.js";
+
 async function getJson(url, options) {
   const res = await fetch(url, options);
   const data = await res.json();
@@ -5,23 +7,53 @@ async function getJson(url, options) {
   return data;
 }
 
+// Nominatim'e doğrudan tarayıcıdan gidilir (artık aradaki sunucu yok).
+// Bölge bbox'ı motor (worker) üzerinden okunur.
+async function nominatimSearch(q, region) {
+  if (q.trim().length < 2) return { results: [] };
+  const { bbox } = await engine.bounds(region);
+  const viewbox = `${bbox[0]},${bbox[3]},${bbox[2]},${bbox[1]}`;
+  const url =
+    `https://nominatim.openstreetmap.org/search?format=json&limit=6&addressdetails=0` +
+    `&viewbox=${viewbox}&bounded=1&q=${encodeURIComponent(q)}`;
+  const r = await fetch(url, { headers: { "User-Agent": "SafeRoute-thesis-project/1.0 (school project demo)" } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const data = await r.json();
+  return { results: data.map((d) => ({ label: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon) })) };
+}
+
+const reverseCache = new Map();
+async function nominatimReverse(lat, lng) {
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  if (reverseCache.has(key)) return { label: reverseCache.get(key) };
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&lat=${lat}&lon=${lng}`;
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": "SafeRoute-thesis-project/1.0 (school project demo)" } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const a = data.address || {};
+    const parts = [a.road || a.pedestrian || a.footway || a.neighbourhood, a.suburb || a.city_district, a.city || a.town || a.village];
+    const label = parts.filter(Boolean).join(", ") || data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    if (reverseCache.size > 500) reverseCache.clear();
+    reverseCache.set(key, label);
+    return { label };
+  } catch {
+    return { label: `${lat.toFixed(5)}, ${lng.toFixed(5)}` };
+  }
+}
+
 export const api = {
-  regions: () => getJson("/api/regions"),
+  regions: () => engine.regions(),
 
-  route: ({ start, end, region, time, safetyPref, accessible }) =>
-    getJson(
-      `/api/route?startLat=${start.lat}&startLng=${start.lng}&endLat=${end.lat}&endLng=${end.lng}` +
-        `&region=${region}&time=${time}&safetyPref=${safetyPref}${accessible ? "&accessible=1" : ""}`
-    ),
+  route: (opts) => engine.route(opts),
 
-  geocode: (q, region) => getJson(`/api/geocode?q=${encodeURIComponent(q)}&region=${region}`),
+  geocode: (q, region) => nominatimSearch(q, region),
 
-  reverse: (lat, lng) => getJson(`/api/reverse?lat=${lat}&lng=${lng}`),
+  reverse: (lat, lng) => nominatimReverse(lat, lng),
 
-  safeHavens: ({ lat, lng, region, time }) =>
-    getJson(`/api/safe-havens?lat=${lat}&lng=${lng}&region=${region}&time=${time}`),
+  safeHavens: (opts) => engine.safeHavens(opts),
 
-  heatmap: (region, time) => getJson(`/api/heatmap?region=${region}&time=${time}`),
+  heatmap: (region, time) => engine.heatmap(region, time),
 
   reports: (region) => getJson(`/api/reports?region=${region}`),
 
