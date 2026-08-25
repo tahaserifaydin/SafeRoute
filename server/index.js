@@ -15,7 +15,6 @@ const PORT = process.env.PORT || 3001;
 // NOT: geojson-path-finder weight fonksiyonunu sadece grafik kurulurken (bir kez)
 // çalıştırıyor; bu yüzden farklı alpha değerleri için ayrı PathFinder örnekleri
 // kurmak gerekiyor (sorgu anında alpha değiştirmek işe yaramıyor).
-const SAFE_ALPHA = 8;
 const WALK_SPEED_KMH = 5;
 const TURN_SAMPLE_M = 20;
 const TURN_ANGLE_THRESHOLD = 40;
@@ -177,7 +176,11 @@ function getFinder(region, timeName, alpha, accessible = false) {
 // Kullanıcının "güvenlik önceliği" kaydırıcısı (0-1) kesikli alpha seviyelerine
 // yuvarlanır; her farklı alpha ayrı bir graf demek olduğundan sürekli değer
 // pratik değil.
-const ALPHA_LEVELS = [2, 5, 8, 14, 22];
+// Deneysel taramada (10 rastgele rota çifti) anlamlı sapmaların tetiklendiği eşikler
+// 8, 14, 22, 30, 60 civarında çıktı; eski üst sınır (22) bazı durumlarda %35'e varan
+// daha güvenli bir alternatifi tamamen kaçırıyordu çünkü rota o eşiğe hiç ulaşmıyordu.
+// Üst uç yükseltildi ki "çok yüksek" gerçekten en agresif kaçınmayı temsil etsin.
+const ALPHA_LEVELS = [2, 6, 14, 28, 55];
 
 function alphaFromPreference(pref) {
   const p = Math.max(0, Math.min(1, Number.isFinite(pref) ? pref : 0.6));
