@@ -148,6 +148,27 @@ ağırlık = tipCiddiyeti × zamanAzalması × (1 + teyitSayısı × 0.5)
 aynı rapor 3 kez teyit edilince etki 14 puana çıktı (tavana yaklaştı ama aşmadı).
 Raporlar hem haritadaki renkleri hem rota maliyet fonksiyonunu etkiler.
 
+## Sesli Navigasyon
+
+Tarayıcının yerleşik konuşma sentezi (`SpeechSynthesis`, `tr-TR`) kullanılır — ekstra
+servis/API anahtarı gerekmez. Yeni bir adıma geçildiğinde yön anonsu yapılır; bir
+sonraki dönüşe 50m kalınca ayrıca "X metre sonra sağa dön" erken uyarısı verilir
+(adım başına yalnızca bir kez). Navigasyon panelinde 🔊/🔇 ile açılıp kapatılabilir,
+tercih tarayıcıda hatırlanır. Amaç: gece yalnız yürüyen birinin ekrana kilitlenmeden
+yürüyebilmesi.
+
+## Kullanıcı Çalışması (Kör A/B Testi)
+
+`/?study=1` adresinde ayrı, bağımsız bir sayfa. Backend rastgele bir başlangıç-bitiş
+çifti seçer, hızlı ve güvenli rotayı hesaplar (güvenlik skoru farkı ≥5 puan olana
+kadar dener), rastgele sırayla "Rota A" / "Rota B" olarak — **hangisinin hangisi
+olduğunu belirtmeden** — sunar. Katılımcı "gece yalnız yürüseydim hangisini
+seçerdim?" sorusuna haritaya bakarak cevap verir; seçim sonrası hangi rotanın
+algoritmanın önerdiği güvenli rota olduğu açığa çıkar ve birikimli istatistik
+("katılımcıların %X'i güvenli rotayı seçti") gösterilir. Tezin kullanıcı
+doğrulama/bulgular bölümü için tasarlandı; yanıtlar `data/study_responses.json`'da
+tutulur (`/api/study/results` ile sorgulanabilir).
+
 ## Acil Durum ve Erişilebilirlik
 
 **Acil durum paneli**: tek dokunuşla 112 araması; "Canlı Konumumu Paylaş" ise

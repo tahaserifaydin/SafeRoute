@@ -11,13 +11,36 @@ const TURN_ICONS = {
   "Hedefe ulaştın": "🏁",
 };
 
-export default function NavBanner({ currentStep, nextStep, liveDistance, onStop, currentScore, isSim }) {
+export default function NavBanner({
+  currentStep,
+  nextStep,
+  liveDistance,
+  onStop,
+  currentScore,
+  isSim,
+  voiceEnabled,
+  onToggleVoice,
+  voiceSupported,
+}) {
   if (!currentStep) return null;
   const icon = TURN_ICONS[currentStep.instruction] || "↑";
 
   return (
     <div className="nav-banner">
-      {isSim && <div className="nav-sim-tag">Simülasyon</div>}
+      <div className="nav-top-row">
+        {isSim && <div className="nav-sim-tag">Simülasyon</div>}
+        {voiceSupported && (
+          <button
+            className="nav-voice-toggle"
+            onClick={onToggleVoice}
+            aria-pressed={voiceEnabled}
+            aria-label={voiceEnabled ? "Sesi kapat" : "Sesi aç"}
+            title={voiceEnabled ? "Sesi kapat" : "Sesi aç"}
+          >
+            {voiceEnabled ? "🔊" : "🔇"}
+          </button>
+        )}
+      </div>
       <div className="nav-main">
         <span className="nav-icon" aria-hidden="true">
           {icon}

@@ -6,6 +6,7 @@ import SegmentInspector, { ScoreLegend } from "./components/SegmentInspector";
 import NavBanner from "./components/NavBanner";
 import EmergencyPanel from "./components/EmergencyPanel";
 import { HavensList, ReportForm, SavedRoutes, StepsList } from "./components/Panels";
+import { PROXIMITY_WARNING_M, isVoiceSupported, speak, stopSpeaking } from "./lib/voice";
 import {
   api,
   decodeStateFromUrl,
@@ -75,6 +76,17 @@ export default function App() {
   const [navIsSim, setNavIsSim] = useState(false);
   const [userPos, setUserPos] = useState(null);
   const [stepIndex, setStepIndex] = useState(0);
+  const [voiceEnabled, setVoiceEnabled] = useState(() => localStorage.getItem("saferoute.voice") !== "off");
+  const warnedStepRef = useRef(-1);
+
+  const toggleVoice = () => {
+    setVoiceEnabled((v) => {
+      const next = !v;
+      localStorage.setItem("saferoute.voice", next ? "on" : "off");
+      if (!next) stopSpeaking();
+      return next;
+    });
+  };
   const watchIdRef = useRef(null);
   const simIntervalRef = useRef(null);
   const simProgressRef = useRef(0);
@@ -239,6 +251,7 @@ export default function App() {
     setNavActive(false);
     setNavIsSim(false);
     setUserPos(null);
+    stopSpeaking();
   }, []);
 
   useEffect(() => () => stopNav(), [stopNav]);
@@ -296,6 +309,22 @@ export default function App() {
   const nextStep = active && navActive ? active.steps[stepIndex + 1] : null;
   const liveDistance =
     nextStep?.at && userPos ? haversineM(userPos, { lng: nextStep.at[0], lat: nextStep.at[1] }) : null;
+
+  // Yeni adıma geçince anons et
+  useEffect(() => {
+    if (!navActive || !voiceEnabled || !currentStep) return;
+    speak(currentStep.instruction);
+    warnedStepRef.current = -1; // yeni adımda yaklaşma uyarısı tekrar verilebilsin
+  }, [navActive, voiceEnabled, stepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bir sonraki dönüşe yaklaşınca ("50 metre sonra sağa dön") tek seferlik erken uyarı
+  useEffect(() => {
+    if (!navActive || !voiceEnabled || !nextStep || liveDistance == null) return;
+    if (liveDistance <= PROXIMITY_WARNING_M && warnedStepRef.current !== stepIndex) {
+      warnedStepRef.current = stepIndex;
+      speak(`${Math.round(liveDistance)} metre sonra ${nextStep.instruction.toLowerCase()}`);
+    }
+  }, [liveDistance, navActive, voiceEnabled, nextStep, stepIndex]);
 
   // Navigasyon sırasında bulunulan parçanın skoru
   const currentScore = useMemo(() => {
@@ -432,6 +461,9 @@ export default function App() {
               onStop={stopNav}
               currentScore={currentScore}
               isSim={navIsSim}
+              voiceEnabled={voiceEnabled}
+              onToggleVoice={toggleVoice}
+              voiceSupported={isVoiceSupported()}
             />
           ) : (
             <>
@@ -564,6 +596,9 @@ export default function App() {
                 <button className="tool-btn emergency" onClick={() => setEmergencyOpen(true)}>
                   🆘 Acil Durum
                 </button>
+                <a className="tool-btn" href="?study=1" target="_blank" rel="noreferrer">
+                  🔬 Çalışmaya katıl
+                </a>
                 {result && (
                   <>
                     <button className="tool-btn" onClick={shareLink}>

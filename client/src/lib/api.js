@@ -48,6 +48,15 @@ export const api = {
     }),
   emergencyStop: (id) => getJson(`/api/emergency/${id}/stop`, { method: "POST" }),
   emergencyGet: (id) => getJson(`/api/emergency/${id}`),
+
+  studyScenario: (region, time) => getJson(`/api/study/scenario?region=${region}&time=${time}`),
+  studyRespond: (body) =>
+    getJson("/api/study/respond", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  studyResults: (region) => getJson(`/api/study/results${region ? `?region=${region}` : ""}`),
 };
 
 // --- Kaydedilmiş rotalar (tarayıcı belleğinde) ---

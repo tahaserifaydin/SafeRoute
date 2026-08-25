@@ -825,6 +825,120 @@ app.get("/api/reverse", async (req, res) => {
   }
 });
 
+// --- Kullanıcı çalışması: kör A/B testi ---
+// Tez için doğrulama verisi: kullanıcıya hangisinin "güvenli" hangisinin "hızlı"
+// olduğu SÖYLENMEDEN iki rota gösterilir ("A" ve "B", rastgele sırayla), "gece
+// yalnız yürürken hangisini seçerdin?" sorulur. Sonuç: algoritmanın önerdiği rota
+// kör test altında ne sıklıkla tercih ediliyor?
+const STUDY_PATH = path.join(DATA_ROOT, "study_responses.json");
+function readStudyResponses() {
+  try {
+    return JSON.parse(fs.readFileSync(STUDY_PATH, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+app.get("/api/study/scenario", (req, res) => {
+  const region = getRegion(req.query.region);
+  const timeName = getTimeName(req.query.time);
+  const [minLng, minLat, maxLng, maxLat] = region.bbox;
+
+  let attempt = 0;
+  let fastRoute = null;
+  let safeRoute = null;
+  let sLat, sLng, eLat, eLng;
+
+  // Anlamlı bir seçim olsun diye rota gerçekten farklılaşana kadar rastgele
+  // nokta çiftleri dener.
+  while (attempt < 30) {
+    attempt++;
+    sLat = minLat + Math.random() * (maxLat - minLat);
+    sLng = minLng + Math.random() * (maxLng - minLng);
+    eLat = Math.max(minLat, Math.min(maxLat, sLat + (Math.random() - 0.5) * 0.02));
+    eLng = Math.max(minLng, Math.min(maxLng, sLng + (Math.random() - 0.5) * 0.03));
+
+    try {
+      const fastFinder = getFinder(region, timeName, 0, false);
+      const safeFinder = getFinder(region, timeName, 8, false);
+      fastRoute = computeRoute(region, sLng, sLat, eLng, eLat, fastFinder, timeName);
+      safeRoute = computeRoute(region, sLng, sLat, eLng, eLat, safeFinder, timeName);
+    } catch {
+      fastRoute = null;
+      safeRoute = null;
+      continue;
+    }
+    if (!fastRoute || !safeRoute) continue;
+    if (fastRoute.distanceKm < 0.3 || fastRoute.distanceKm > 2.5) continue;
+    const meaningfullyDifferent = safeRoute.avgSafetyScore - fastRoute.avgSafetyScore >= 5;
+    if (meaningfullyDifferent) break;
+    fastRoute = null;
+    safeRoute = null;
+  }
+
+  if (!fastRoute || !safeRoute) {
+    return res.status(404).json({ error: "Bu bölgede anlamlı bir senaryo bulunamadı, tekrar dene." });
+  }
+
+  // Rastgele A/B etiketleme — kullanıcı hangisinin "güvenli" olduğunu göremesin
+  const safeIsA = Math.random() < 0.5;
+  const scenarioId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  res.json({
+    scenarioId,
+    region: region.id,
+    timeProfile: timeName,
+    routeA: safeIsA ? safeRoute : fastRoute,
+    routeB: safeIsA ? fastRoute : safeRoute,
+    safeIsA,
+  });
+});
+
+app.post("/api/study/respond", (req, res) => {
+  const { scenarioId, region, chosen, safeIsA, distanceA, distanceB, avgSafetyA, avgSafetyB } = req.body || {};
+  if (!scenarioId || (chosen !== "A" && chosen !== "B")) {
+    return res.status(400).json({ error: "scenarioId ve chosen ('A' ya da 'B') zorunlu" });
+  }
+  const responses = readStudyResponses();
+  const chosenIsSafe = (chosen === "A") === !!safeIsA;
+  responses.push({
+    scenarioId,
+    region: getRegion(region).id,
+    chosen,
+    chosenIsSafe,
+    safeIsA: !!safeIsA,
+    distanceA,
+    distanceB,
+    avgSafetyA,
+    avgSafetyB,
+    createdAt: new Date().toISOString(),
+  });
+  fs.writeFileSync(STUDY_PATH, JSON.stringify(responses, null, 2));
+  res.json({ ok: true });
+});
+
+app.get("/api/study/results", (req, res) => {
+  const regionId = req.query.region;
+  const all = readStudyResponses();
+  const filtered = regionId ? all.filter((r) => r.region === regionId) : all;
+  const total = filtered.length;
+  const safeChosen = filtered.filter((r) => r.chosenIsSafe).length;
+  const avgDetourPct = total
+    ? filtered.reduce((s, r) => {
+        const fastD = r.safeIsA ? r.distanceB : r.distanceA;
+        const safeD = r.safeIsA ? r.distanceA : r.distanceB;
+        return s + (fastD ? ((safeD - fastD) / fastD) * 100 : 0);
+      }, 0) / total
+    : null;
+
+  res.json({
+    total,
+    safeChosen,
+    safeChosenPct: total ? Math.round((safeChosen / total) * 100) : null,
+    avgDetourPct: avgDetourPct != null ? Math.round(avgDetourPct * 10) / 10 : null,
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`SafeRoute API http://localhost:${PORT} üzerinde çalışıyor`);
 });
