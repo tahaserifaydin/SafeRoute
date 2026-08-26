@@ -72,6 +72,15 @@ async function loadRoadsScored(id) {
   return { type: "FeatureCollection", features: shards.flatMap((s) => s.features) };
 }
 
+const metaCache = {};
+async function loadMeta(id) {
+  if (regionData[id]) return { bbox: regionData[id].bbox };
+  if (metaCache[id]) return metaCache[id];
+  const meta = await fetch(`/data/${id}/meta.json`).then((r) => r.json());
+  metaCache[id] = meta;
+  return meta;
+}
+
 async function loadRegion(id) {
   if (regionData[id]) return regionData[id];
   const [roadsScored, amenities] = await Promise.all([
@@ -415,8 +424,11 @@ self.onmessage = async (e) => {
         result = await handleRegions();
         break;
       case "bounds": {
-        const region = await loadRegion(payload.region);
-        result = { bbox: region.bbox };
+        // Bölgenin tüm yol ağını indirip işlemeden (loadRegion) sınırları
+        // öğrenmek için ayrı, birkaç yüz baytlık bir dosya okunuyor — arama
+        // kutusu her sorguda bunu çağırıyor, tam bölge yüklemesini burada
+        // tetiklemek arama kutusunu mobilde dakikalarca "boş" gösteriyordu.
+        result = await loadMeta(payload.region);
         break;
       }
       default:

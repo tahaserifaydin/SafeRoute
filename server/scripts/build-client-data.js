@@ -138,6 +138,15 @@ function buildRoads(dataDir, outDir) {
 
   fs.mkdirSync(outDir, { recursive: true });
 
+  // Sınır kutusu (bbox) burada, build zamanında, bir kere hesaplanıp küçük bir
+  // dosyaya yazılıyor. Önceden worker.js arama kutusundaki her sorgu öncesi
+  // "sınırları öğrenmek" için TÜM yol ağını (Eindhoven'da 27MB) indirip
+  // işliyordu — mobil bağlantıda arama dakikalarca "sonuç yok" gibi görünüyordu.
+  // Artık bounds() bu birkaç yüz baytlık dosyayı okuyor, bölge verisini hiç
+  // indirmeden anında yanıt veriyor.
+  const bbox = turf.bbox({ type: "FeatureCollection", features: lite.features });
+  fs.writeFileSync(path.join(outDir, "meta.json"), JSON.stringify({ bbox }));
+
   // Cloudflare Pages dosya başına 25MB sınırı koyuyor (Eindhoven tek parça ~27MB).
   // Yol ağını bölmek (simplify ile) bağlantı bütünlüğünü bozduğundan (bkz. yukarıdaki
   // not), bunun yerine veri kaybı olmadan birden fazla dosyaya parçalanıyor; tarayıcı
