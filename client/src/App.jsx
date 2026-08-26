@@ -416,13 +416,16 @@ export default function App() {
   const submitReport = async () => {
     if (!pendingReport) return;
     try {
-      const data = await api.addReport({ ...pendingReport, region });
-      setReports((prev) => [...prev, data.report]);
+      await api.addReport({ ...pendingReport, region });
+      // api.reports() hem state'i hem motoru (worker) güncel rapor listesiyle
+      // senkronize eder — yeni rapor, bir sonraki rota hesaplamasında hemen
+      // skora yansısın diye önce bu bekleniyor.
+      const d = await api.reports(region);
+      setReports(d.reports || []);
       setPendingReport(null);
       setReportMode(false);
       showToast("Rapor kaydedildi, teşekkürler.");
-      if (start && end) setSafetyPref((p) => p); // rota yeniden hesaplansın diye tetikleyici
-      setFitTrigger((t) => t);
+      if (start && end) setSafetyPref((p) => p + 1e-9); // rota yeniden hesaplansın diye (gözle fark edilmez) tetikleyici
     } catch (err) {
       setError("Rapor gönderilemedi: " + err.message);
     }

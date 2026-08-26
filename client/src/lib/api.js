@@ -1,4 +1,4 @@
-import { engine } from "../engine/engineClient.js";
+import { engine, setReports as syncReportsToEngine } from "../engine/engineClient.js";
 
 async function getJson(url, options) {
   const res = await fetch(url, options);
@@ -86,7 +86,13 @@ export const api = {
 
   heatmap: (region, time) => engine.heatmap(region, time),
 
-  reports: (region) => getJson(`/api/reports?region=${region}`),
+  // Motora (Web Worker) da senkronize edilir — aksi halde raporlar sadece
+  // haritada pin olarak görünür ama rota hesaplamasını (skoru) hiç etkilemezdi.
+  reports: async (region) => {
+    const d = await getJson(`/api/reports?region=${region}`);
+    syncReportsToEngine(d.reports || []).catch(() => {});
+    return d;
+  },
 
   addReport: (body) =>
     getJson("/api/reports", {
