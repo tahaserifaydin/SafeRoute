@@ -21,6 +21,80 @@ function roundCoords(coords, precision) {
   return coords.map(([lng, lat]) => [+lng.toFixed(precision), +lat.toFixed(precision)]);
 }
 
+// Basit union-find: yol ağının kaç ayrı bağlı bileşene bölündüğünü bulur.
+class UnionFind {
+  constructor() {
+    this.parent = new Map();
+    this.size = new Map();
+  }
+  find(x) {
+    if (!this.parent.has(x)) {
+      this.parent.set(x, x);
+      this.size.set(x, 1);
+      return x;
+    }
+    let root = x;
+    while (this.parent.get(root) !== root) root = this.parent.get(root);
+    // yol sıkıştırma
+    let cur = x;
+    while (this.parent.get(cur) !== root) {
+      const next = this.parent.get(cur);
+      this.parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  }
+  union(a, b) {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra === rb) return;
+    const sa = this.size.get(ra);
+    const sb = this.size.get(rb);
+    if (sa < sb) {
+      this.parent.set(ra, rb);
+      this.size.set(rb, sa + sb);
+    } else {
+      this.parent.set(rb, ra);
+      this.size.set(ra, sa + sb);
+    }
+  }
+}
+
+// Bir yaya OSM'de gerçekte var olan ama veri setinde çekilmemiş bir bağlantı
+// yüzünden (nadir OSM etiketleme boşlukları, harita dışı kısımlar vb.) küçük,
+// ana ağdan kopuk bir "adacığa" düşerse, o adacığın içindeki HERHANGİ bir
+// noktaya rota istendiğinde "bulunamadı" hatası alınır — kullanıcı için anlamsız
+// bir hata deneyimi. Küçük adacıkları veri setinden tamamen çıkarmak (yalnızca
+// en büyük bağlı bileşeni tutmak), tıklanan iki nokta ne olursa olsun rotanın
+// her zaman bulunabilmesini garanti eder. İzmir bölgelerinde bu adım olmadan
+// rastgele nokta çiftlerinin ~%13-80'i "bulunamadı" veriyordu (bkz. proje notları).
+function keepLargestComponent(features) {
+  const uf = new UnionFind();
+  const keyOf = ([lng, lat]) => `${lng},${lat}`;
+  for (const f of features) {
+    const coords = f.geometry.coordinates;
+    for (let i = 1; i < coords.length; i++) {
+      uf.union(keyOf(coords[i - 1]), keyOf(coords[i]));
+    }
+  }
+  // En büyük köke sahip bileşeni bul
+  const rootSizes = new Map();
+  for (const key of uf.parent.keys()) {
+    const root = uf.find(key);
+    rootSizes.set(root, (rootSizes.get(root) || 0) + 1);
+  }
+  let bestRoot = null;
+  let bestSize = -1;
+  for (const [root, size] of rootSizes) {
+    if (size > bestSize) {
+      bestSize = size;
+      bestRoot = root;
+    }
+  }
+  const kept = features.filter((f) => uf.find(keyOf(f.geometry.coordinates[0])) === bestRoot);
+  return { kept, totalVertices: uf.parent.size, mainComponentVertices: bestSize };
+}
+
 function buildRoads(dataDir, outDir) {
   const roads = JSON.parse(fs.readFileSync(path.join(dataDir, "roads_scored.geojson")));
   let coordsBefore = 0,
@@ -52,6 +126,15 @@ function buildRoads(dataDir, outDir) {
         return { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: props };
       }),
   };
+
+  const { kept, totalVertices, mainComponentVertices } = keepLargestComponent(lite.features);
+  const droppedCount = lite.features.length - kept.length;
+  lite.features = kept;
+  console.log(
+    `  bağlı bileşen: ${mainComponentVertices}/${totalVertices} köşe (%${Math.round(
+      (100 * mainComponentVertices) / totalVertices
+    )}) ana ağda, ${droppedCount} segment kopuk adacık olduğu için çıkarıldı`
+  );
 
   fs.mkdirSync(outDir, { recursive: true });
 
@@ -117,7 +200,7 @@ function buildAmenities(dataDir, outDir) {
 }
 
 function main() {
-  const regions = ["eindhoven", "nuenen"];
+  const regions = ["eindhoven", "nuenen", "bornova", "buca", "gaziemir", "alsancak"];
   for (const region of regions) {
     console.log(`[${region}]`);
     const dataDir = path.join(__dirname, "..", "..", "data", region);

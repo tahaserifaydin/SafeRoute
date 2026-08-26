@@ -149,6 +149,11 @@ a:focus-visible {
 }
 
 /* ---------- Segment kontrol (bölge) ---------- */
+/* Başlangıçta yalnızca 2 kısa etiket (Eindhoven/Nuenen) için tasarlanmıştı;
+   flex:1 ile her buton eşit genişlik alıyordu. Bölge sayısı 6'ya çıkıp uzun
+   etiketler (ör. "Gaziemir (İzmir)") eklenince satır taşıyordu — tarayıcı
+   görünmeyen (taşan) bir butona odaklanınca tüm sayfayı yana kaydırıyordu.
+   Artık container kendi içinde yatay kaydırılıyor, butonlar doğal genişliğini koruyor. */
 .segmented {
   display: flex;
   gap: 4px;
@@ -156,10 +161,17 @@ a:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.segmented::-webkit-scrollbar {
+  display: none;
 }
 
 .seg-btn {
-  flex: 1;
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: 8px 10px;
   border: none;
   border-radius: 6px;

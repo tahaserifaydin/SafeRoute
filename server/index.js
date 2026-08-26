@@ -29,6 +29,10 @@ const TIME_PROFILES = ["morning", "midday", "evening", "night", "lateNight"];
 const REGIONS = {
   eindhoven: { label: "Eindhoven", dataDir: "eindhoven", center: [51.4416, 5.4697] },
   nuenen: { label: "Nuenen", dataDir: "nuenen", center: [51.4743, 5.549] },
+  bornova: { label: "Bornova (İzmir)", dataDir: "bornova", center: [38.4581, 27.2397] },
+  buca: { label: "Buca (İzmir)", dataDir: "buca", center: [38.3666, 27.2115] },
+  gaziemir: { label: "Gaziemir (İzmir)", dataDir: "gaziemir", center: [38.3213, 27.1412] },
+  alsancak: { label: "Alsancak (İzmir)", dataDir: "alsancak", center: [38.4384, 27.1434] },
 };
 
 function currentTimeProfile() {

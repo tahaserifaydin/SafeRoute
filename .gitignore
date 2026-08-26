@@ -2,3 +2,5 @@ node_modules/
 .DS_Store
 *.log
 client/dist/
+data/user_reports.json
+data/study_responses.json

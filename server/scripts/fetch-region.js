@@ -1,5 +1,7 @@
 // Verilen bir OSM alan adı için yol ağı, lamba ve işletme verisini Overpass API'den çekip
-// GeoJSON olarak kaydeder. Kullanım: node fetch-region.js "Nuenen" nuenen [--force]
+// GeoJSON olarak kaydeder. Kullanım: node fetch-region.js "Nuenen" nuenen [admin_level] [--force]
+// admin_level varsayılan 8 (Hollanda belediyesi); Türkiye ilçeleri genelde 6,
+// mahalleler 8 veya 10 olabilir — OSM'deki gerçek relation etiketine bakılmalı.
 const fs = require("fs");
 const path = require("path");
 const osmtogeojson = require("osmtogeojson");
@@ -8,10 +10,20 @@ const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
 const areaName = process.argv[2];
 const outDirName = process.argv[3];
+const adminLevelArg = process.argv[4] && !process.argv[4].startsWith("--") ? process.argv[4] : "8";
 if (!areaName || !outDirName) {
-  console.error('Kullanım: node fetch-region.js "<OSM alan adı>" <çıktı-klasör-adı> [--force]');
+  console.error('Kullanım: node fetch-region.js "<OSM alan adı>" <çıktı-klasör-adı> [admin_level] [--force]');
   process.exit(1);
 }
+
+// Bazı mahalle/semt isimleri Türkiye'de tekrarlanıyor (ör. "Alsancak Mahallesi"
+// hem İzmir'de hem başka illerde var) — isim+admin_level filtresi TÜM Türkiye'yi
+// tarayıp hepsini eşleştiriyor. Overpass'ta area-içinde-area filtresi ("(area.X)")
+// yalnızca node/way/relation'ları süzer, area'ları süzmez — bu yüzden isim
+// belirsizse --rel <relation-id> ile doğrudan OSM relation ID verilmeli
+// (Nominatim üzerinden doğru relation ID bulunabilir).
+const relIdx = process.argv.indexOf("--rel");
+const relId = relIdx !== -1 ? process.argv[relIdx + 1] : null;
 
 const OUT_DIR = path.join(__dirname, "..", "..", "data", outDirName);
 
@@ -54,16 +66,28 @@ async function fetchAndSave(name, query, retries = 4) {
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  const areaFilter = `area["name"="${areaName}"]["admin_level"="8"]->.a;`;
+  const areaFilter = relId
+    ? `rel(${relId});map_to_area->.a;`
+    : `area["name"="${areaName}"]["admin_level"="${adminLevelArg}"]->.a;`;
 
-  // Yaya-dostu yol ağı: her zaman yürünebilir yol tipleri + kaldırımı
-  // etiketlenmiş ana caddeler (kaldırımsız hızlı trafik yollarını dışarıda bırakır)
+  // Yaya-dostu yol ağı: her zaman yürünebilir yol tipleri + ana caddeler.
+  // NOT: primary/secondary/tertiary için "sidewalk" etiketi ARTIK ŞART DEĞİL.
+  // Hollanda'da bu etiket neredeyse hep var, ama Türkiye'de OSM haritalayıcıları
+  // bunu neredeyse hiç etiketlemiyor (örn. Bornova'da 1368 ana caddeden sadece 5'i
+  // etiketli) — etiket şartı konulunca mahalleleri birbirine bağlayan ana caddeler
+  // tamamen dışarıda kalıyor ve yol ağı yüzlerce kopuk adacığa bölünüyor (test:
+  // rastgele 15 rota isteğinin 13'ü "bulunamadı" veriyordu). "Etiket yok" burada da
+  // diğer skorlama adımlarındaki gibi "yok" değil "bilinmiyor" sayılıyor. Trunk
+  // (İstanbul/otoyol benzeri hızlı yollar) için ise kaldırım şartı korunuyor —
+  // bunlar gerçekten yayaya kapalı olabilir, aksine dair etiket olmadan dahil
+  // etmek riskli.
   const roadsQuery = `
     [out:json][timeout:180];
     ${areaFilter}
     (
       way["highway"~"^(residential|living_street|pedestrian|footway|path|steps|track|service|unclassified|cycleway)$"](area.a);
-      way["highway"~"^(tertiary|secondary|primary|trunk)$"]["sidewalk"~"^(yes|both|left|right|separate)$"](area.a);
+      way["highway"~"^(tertiary|secondary|primary)$"]["sidewalk"!~"^(no|none)$"]["foot"!="no"](area.a);
+      way["highway"="trunk"]["sidewalk"~"^(yes|both|left|right|separate)$"](area.a);
     );
     out geom;
   `;

@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { api } from "./lib/api";
+import { REGIONS as REGION_CONFIG } from "./engine/engineClient.js";
 import { toLatLngs } from "./lib/constants";
 import "./App.css";
 
-const REGIONS = [
-  { id: "eindhoven", label: "Eindhoven" },
-  { id: "nuenen", label: "Nuenen" },
-];
+// Tek kaynaktan (engineClient.js) okunur ki yeni bölge eklendiğinde burada
+// unutulup eski hardcoded listeyle çelişmesin (bkz. proje notları: Bornova
+// StudyView'da seçilemiyordu çünkü bu liste ayrıca elle tutuluyordu).
+const REGIONS = Object.values(REGION_CONFIG).map((r) => ({ id: r.id, label: r.label }));
 const TIME_OPTIONS = [
   { id: "midday", label: "Öğle (gündüz)" },
   { id: "lateNight", label: "Gece yarısı" },
