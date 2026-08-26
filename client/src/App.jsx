@@ -29,11 +29,13 @@ import {
 import "./App.css";
 
 const urlState = decodeStateFromUrl();
+const hadExplicitRegion = !!urlState.region; // paylaşılan bir bağlantıdan geldiyse bölgeyi ezme
 
 export default function App() {
   // --- Bölge / zaman ---
   const [regions, setRegions] = useState([]);
   const [region, setRegion] = useState(urlState.region || "eindhoven");
+  const autoRegionDone = useRef(hadExplicitRegion); // true ise bir daha otomatik seçim denenmez
   const [timeMode, setTimeMode] = useState(urlState.timeMode || "auto");
   const [autoTimeProfile, setAutoTimeProfile] = useState(localTimeProfile());
   const [flyTrigger, setFlyTrigger] = useState(0);
@@ -142,6 +144,27 @@ export default function App() {
       })
       .catch(() => setError("Sunucuya bağlanılamadı. Arka uç çalışıyor mu?"));
   }, []);
+
+  // Sayfa her zaman Eindhoven ile açılmasın diye: paylaşılan bir bağlantıdan
+  // (URL'de bölge parametresi) gelinmediyse, gerçek konuma en yakın bölge
+  // otomatik seçilir (ör. Türkiye'deyken İzmir bölgelerinden biri açılır).
+  useEffect(() => {
+    if (autoRegionDone.current || !approxPos || !regions.length) return;
+    autoRegionDone.current = true;
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const r of regions) {
+      const d = haversineM(approxPos, { lat: r.center[0], lng: r.center[1] });
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = r;
+      }
+    }
+    if (nearest && nearest.id !== region) {
+      setRegion(nearest.id);
+      setFlyTrigger((t) => t + 1);
+    }
+  }, [approxPos, regions, region]);
 
   useEffect(() => {
     api
