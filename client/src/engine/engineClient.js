@@ -14,6 +14,7 @@ export const REGIONS = {
   buca: { id: "buca", label: "Buca (İzmir)", center: [38.3666, 27.2115] },
   gaziemir: { id: "gaziemir", label: "Gaziemir (İzmir)", center: [38.3213, 27.1412] },
   alsancak: { id: "alsancak", label: "Alsancak (İzmir)", center: [38.4384, 27.1434] },
+  mustafakemalpasa: { id: "mustafakemalpasa", label: "Mustafakemalpaşa (Bursa)", center: [39.9766, 28.4786] },
 };
 
 function getWorker() {

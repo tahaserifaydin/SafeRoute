@@ -33,6 +33,7 @@ const REGIONS = {
   buca: { label: "Buca (İzmir)", dataDir: "buca", center: [38.3666, 27.2115] },
   gaziemir: { label: "Gaziemir (İzmir)", dataDir: "gaziemir", center: [38.3213, 27.1412] },
   alsancak: { label: "Alsancak (İzmir)", dataDir: "alsancak", center: [38.4384, 27.1434] },
+  mustafakemalpasa: { label: "Mustafakemalpaşa (Bursa)", dataDir: "mustafakemalpasa", center: [39.9766, 28.4786] },
 };
 
 function currentTimeProfile() {

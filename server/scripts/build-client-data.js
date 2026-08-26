@@ -212,7 +212,7 @@ function buildAmenities(dataDir, outDir) {
 }
 
 function main() {
-  const regions = ["eindhoven", "nuenen", "bornova", "buca", "gaziemir", "alsancak"];
+  const regions = ["eindhoven", "nuenen", "bornova", "buca", "gaziemir", "alsancak", "mustafakemalpasa"];
   for (const region of regions) {
     console.log(`[${region}]`);
     const dataDir = path.join(__dirname, "..", "..", "data", region);
