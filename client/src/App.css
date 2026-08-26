@@ -303,12 +303,29 @@ a:focus-visible {
 }
 
 .suggestions li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   padding: 9px 10px;
   font-size: 12.5px;
   color: var(--text-dim);
   border-radius: 6px;
   cursor: pointer;
   line-height: 1.4;
+}
+
+.suggestion-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestion-distance {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 .suggestions li.active,

@@ -143,6 +143,62 @@ export function adjustScore(baseScore, weightedReportsArr, lng, lat) {
   return Math.max(0, Math.min(100, baseScore - effect));
 }
 
+// --- Kategori araması: "market", "eczane" gibi genel kelimeler adı yazılmadan
+// yakındaki eşleşen işletmeleri bulsun diye (Google Maps'teki "yakınımda X" araması
+// gibi). Her kategori OSM etiketlerine (amenity/shop/tourism/leisure/...) karşılık
+// gelir; kullanıcı sorgusu bu anahtar kelimelerden biriyle eşleşirse isim araması
+// yerine bölgedeki tüm eşleşen noktalar mesafeye göre sıralanıp döner.
+export const CATEGORY_KEYWORDS = [
+  { keywords: ["market", "süpermarket", "supermarket", "bakkal", "büfe"], label: "Market", match: (p) => p.shop === "supermarket" || p.shop === "convenience" || p.shop === "grocery" || p.shop === "greengrocer" },
+  { keywords: ["eczane", "pharmacy"], label: "Eczane", match: (p) => p.amenity === "pharmacy" },
+  { keywords: ["banka", "atm", "bank"], label: "Banka", match: (p) => p.amenity === "bank" },
+  { keywords: ["hastane", "hospital", "acil"], label: "Hastane", match: (p) => p.amenity === "hospital" },
+  { keywords: ["okul", "school", "lise", "ilkokul"], label: "Okul", match: (p) => p.amenity === "school" || p.amenity === "kindergarten" },
+  { keywords: ["üniversite", "universite", "university", "kampüs"], label: "Üniversite", match: (p) => p.amenity === "university" || p.amenity === "college" },
+  { keywords: ["restoran", "restaurant", "yemek", "lokanta"], label: "Restoran", match: (p) => p.amenity === "restaurant" || p.amenity === "fast_food" },
+  { keywords: ["kafe", "cafe", "kahve"], label: "Kafe", match: (p) => p.amenity === "cafe" },
+  { keywords: ["otel", "hotel", "konaklama"], label: "Otel", match: (p) => p.tourism === "hotel" || p.tourism === "guest_house" },
+  { keywords: ["benzinlik", "istasyon", "fuel", "petrol", "akaryakıt"], label: "Benzinlik", match: (p) => p.amenity === "fuel" },
+  { keywords: ["park", "yeşil alan"], label: "Park", match: (p) => p.leisure === "park" || p.leisure === "garden" || p.leisure === "playground" },
+  { keywords: ["stadyum", "stadium", "saha"], label: "Stadyum", match: (p) => p.leisure === "stadium" || p.leisure === "pitch" },
+  { keywords: ["polis", "police", "karakol"], label: "Polis", match: (p) => p.amenity === "police" },
+  { keywords: ["itfaiye", "fire"], label: "İtfaiye", match: (p) => p.amenity === "fire_station" },
+  { keywords: ["postane", "ptt", "post"], label: "PTT", match: (p) => p.amenity === "post_office" },
+  { keywords: ["kütüphane", "kutuphane", "library"], label: "Kütüphane", match: (p) => p.amenity === "library" },
+  { keywords: ["otobüs", "otobus", "durak", "bus"], label: "Otobüs durağı", match: (p) => p.highway === "bus_stop" || p.amenity === "bus_station" || !!p.public_transport },
+  { keywords: ["tren", "metro", "istasyon", "station", "raylı"], label: "İstasyon", match: (p) => p.railway === "station" },
+  { keywords: ["taksi", "taxi"], label: "Taksi durağı", match: (p) => p.amenity === "taxi" },
+  { keywords: ["cami", "kilise", "havra", "ibadethane"], label: "İbadethane", match: (p) => p.amenity === "place_of_worship" },
+  { keywords: ["sinema", "cinema"], label: "Sinema", match: (p) => p.amenity === "cinema" },
+  { keywords: ["tiyatro", "theatre"], label: "Tiyatro", match: (p) => p.amenity === "theatre" },
+  { keywords: ["müze", "muze", "museum"], label: "Müze", match: (p) => p.tourism === "museum" },
+  { keywords: ["spor", "fitness", "gym", "spor salonu"], label: "Spor salonu", match: (p) => p.leisure === "fitness_centre" || p.leisure === "sports_centre" },
+  { keywords: ["veteriner", "vet"], label: "Veteriner", match: (p) => p.amenity === "veterinary" },
+  { keywords: ["diş", "dis", "dentist", "dişçi"], label: "Diş hekimi", match: (p) => p.amenity === "dentist" },
+  { keywords: ["otopark", "parking", "park yeri"], label: "Otopark", match: (p) => p.amenity === "parking" },
+];
+
+function normalizeTr(s) {
+  return s
+    .toLocaleLowerCase("tr")
+    .replace(/ı/g, "i")
+    .trim();
+}
+
+// Sorgu bir kategori anahtar kelimesiyle eşleşirse o kategoriyi döner (isim
+// araması değil, "yakınımdaki X" araması yapılmalı demektir).
+export function matchCategory(query) {
+  const q = normalizeTr(query);
+  if (q.length < 2) return null;
+  for (const cat of CATEGORY_KEYWORDS) {
+    for (const kw of cat.keywords) {
+      const nkw = normalizeTr(kw);
+      if (q === nkw || nkw.startsWith(q) || q.startsWith(nkw)) return cat;
+    }
+  }
+  return null;
+}
+
 // --- Isı haritası bantları ---
 export const HEATMAP_BANDS = [
   { max: 35, color: "#dc2626", label: "0-34" },

@@ -84,4 +84,7 @@ export const engine = {
   heatmap: (region, time) => call("heatmap", { region, time }),
 
   bounds: (region) => call("bounds", { region }),
+
+  categorySearch: ({ region, query, near }) =>
+    call("categorySearch", { region, query, nearLat: near.lat, nearLng: near.lng }),
 };

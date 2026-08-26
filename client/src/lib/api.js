@@ -7,19 +7,48 @@ async function getJson(url, options) {
   return data;
 }
 
+function haversineM(a, b) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 // Nominatim'e doğrudan tarayıcıdan gidilir (artık aradaki sunucu yok).
 // Bölge bbox'ı motor (worker) üzerinden okunur.
 async function nominatimSearch(q, region) {
-  if (q.trim().length < 2) return { results: [] };
   const { bbox } = await engine.bounds(region);
   const viewbox = `${bbox[0]},${bbox[3]},${bbox[2]},${bbox[1]}`;
   const url =
-    `https://nominatim.openstreetmap.org/search?format=json&limit=6&addressdetails=0` +
+    `https://nominatim.openstreetmap.org/search?format=json&limit=8&addressdetails=0` +
     `&viewbox=${viewbox}&bounded=1&q=${encodeURIComponent(q)}`;
   const r = await fetch(url, { headers: { "User-Agent": "SafeRoute-thesis-project/1.0 (school project demo)" } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const data = await r.json();
-  return { results: data.map((d) => ({ label: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon) })) };
+  return data.map((d) => ({ label: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }));
+}
+
+// Arama: önce "market", "eczane" gibi kategori sözcüğü mü diye bakılır — öyleyse
+// adı yazılmadan bölgedeki eşleşen tüm noktalar `near`e (kullanıcı konumu ya da
+// harita merkezi) en yakından en uzağa sıralanıp döner (Google Maps'teki
+// "yakınımda X" aramasına benzer). Değilse Nominatim'de isim araması yapılır;
+// `near` verilmişse sonuçlar yine mesafeye göre yeniden sıralanır ve her sonucun
+// yanında mesafe gösterilir.
+async function geocode(q, region, near) {
+  if (q.trim().length < 2) return { results: [] };
+
+  if (near) {
+    const cat = await engine.categorySearch({ region, query: q, near }).catch(() => null);
+    if (cat && cat.results.length) return { results: cat.results, isCategory: true };
+  }
+
+  const raw = await nominatimSearch(q, region);
+  const results = near
+    ? raw.map((r) => ({ ...r, distanceM: Math.round(haversineM(near, r)) })).sort((a, b) => a.distanceM - b.distanceM)
+    : raw;
+  return { results };
 }
 
 const reverseCache = new Map();
@@ -47,7 +76,7 @@ export const api = {
 
   route: (opts) => engine.route(opts),
 
-  geocode: (q, region) => nominatimSearch(q, region),
+  geocode: (q, region, near) => geocode(q, region, near),
 
   reverse: (lat, lng) => nominatimReverse(lat, lng),
 

@@ -102,14 +102,20 @@ async function main() {
     out geom;
   `;
 
-  // Açık işletmeler + sığınılabilecek noktalar.
+  // Açık işletmeler + sığınılabilecek noktalar + genel "yakınımdaki X" araması
+  // için kategori kapsamı (market, eczane, okul, stadyum, durak vb. — Google
+  // Maps benzeri "adını yazmadan bul" deneyimi için gerekli).
   // ÖNEMLİ: Hastane ve polis merkezleri OSM'de çoğunlukla NOKTA değil ALAN (way/relation)
   // olarak etiketlenir; sadece node çekmek Eindhoven'ın en büyük iki hastanesini
   // (Máxima, Catharina) kaçırıyordu. Bu yüzden way/relation da çekilip `out center`
   // ile merkez noktaları alınıyor.
   const amenityTypes =
     "cafe|restaurant|bar|pub|nightclub|biergarten|pharmacy|fast_food|fuel|hospital|police|clinic|doctors|taxi" +
-    "|bank|post_office|library|community_centre|townhall|fire_station|social_facility|place_of_worship";
+    "|bank|post_office|library|community_centre|townhall|fire_station|social_facility|place_of_worship" +
+    "|school|university|college|kindergarten|cinema|theatre|marketplace|bus_station|parking|car_rental" +
+    "|ferry_terminal|veterinary|dentist|events_venue";
+  const leisureTypes = "stadium|park|sports_centre|fitness_centre|pitch|swimming_pool|garden|playground";
+  const tourismTypes = "hotel|guest_house|museum|attraction|viewpoint|gallery|zoo";
   const amenitiesQuery = `
     [out:json][timeout:180];
     ${areaFilter}
@@ -119,11 +125,15 @@ async function main() {
       relation["amenity"~"^(${amenityTypes})$"](area.a);
       node["shop"](area.a);
       way["shop"](area.a);
-      node["tourism"="hotel"](area.a);
-      way["tourism"="hotel"](area.a);
+      node["leisure"~"^(${leisureTypes})$"](area.a);
+      way["leisure"~"^(${leisureTypes})$"](area.a);
+      relation["leisure"~"^(${leisureTypes})$"](area.a);
+      node["tourism"~"^(${tourismTypes})$"](area.a);
+      way["tourism"~"^(${tourismTypes})$"](area.a);
       node["railway"="station"](area.a);
       way["railway"="station"](area.a);
-      node["public_transport"="station"](area.a);
+      node["public_transport"~"^(station|stop_position|platform)$"](area.a);
+      node["highway"="bus_stop"](area.a);
     );
     out center;
   `;

@@ -75,6 +75,18 @@ export default function App() {
   const [navActive, setNavActive] = useState(false);
   const [navIsSim, setNavIsSim] = useState(false);
   const [userPos, setUserPos] = useState(null);
+  // Navigasyon dışında da (arama kutusunu mesafeye göre sıralamak için) kaba bir
+  // konuma ihtiyaç var; watchPosition gibi sürekli izleme yerine tek seferlik,
+  // sessizce başarısız olabilen hafif bir istek yeterli.
+  const [approxPos, setApproxPos] = useState(null);
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => setApproxPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+    );
+  }, []);
   const [stepIndex, setStepIndex] = useState(0);
   const [voiceEnabled, setVoiceEnabled] = useState(() => localStorage.getItem("saferoute.voice") !== "off");
   const warnedStepRef = useRef(-1);
@@ -104,6 +116,14 @@ export default function App() {
   const effectiveTime = timeMode === "auto" ? autoTimeProfile : timeMode;
   const currentRegion = regions.find((r) => r.id === region);
   const active = result ? result[selectedRoute] : null;
+
+  // Arama sonuçlarını mesafeye göre sıralamak/yakınımdaki X'i bulmak için referans
+  // nokta: gerçek konum bilinmiyorsa bölge merkezi kullanılır (yine de bir sıralama
+  // sağlar). "Nereye" alanı için başlangıç noktası seçilmişse oradan mesafe daha
+  // anlamlı (Google Maps de varış araması için başlangıçtan mesafe gösterir).
+  const regionCenterPt = currentRegion ? { lat: currentRegion.center[0], lng: currentRegion.center[1] } : null;
+  const nearForStart = userPos || approxPos || regionCenterPt;
+  const nearForEnd = start || userPos || approxPos || regionCenterPt;
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -505,6 +525,7 @@ export default function App() {
                 onChange={setStartQuery}
                 dotClass="dot-start"
                 region={region}
+                near={nearForStart}
                 busy={resolvingStart}
                 onSelect={(s) => {
                   if (!s) {
@@ -522,6 +543,7 @@ export default function App() {
                 onChange={setEndQuery}
                 dotClass="dot-end"
                 region={region}
+                near={nearForEnd}
                 busy={resolvingEnd}
                 onSelect={(s) => {
                   if (!s) {

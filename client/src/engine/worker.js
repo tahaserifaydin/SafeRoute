@@ -18,6 +18,7 @@ import {
   weightedReports,
   reportEffectAt,
   adjustScore,
+  matchCategory,
 } from "./scoring.js";
 
 const WALK_SPEED_KMH = 5;
@@ -358,6 +359,29 @@ async function handleHeatmap({ region: regionId, time }) {
   return { bands: heatmapCache.get(key), timeProfile: timeName };
 }
 
+// "market", "eczane" gibi kategori sözcükleri için: adı yazmadan, bölgedeki
+// eşleşen tüm noktaları kullanıcının konumuna (veya harita merkezine) en yakından
+// en uzağa sıralayıp döner — Google Maps'teki "yakınımda X" aramasına benzer.
+async function handleCategorySearch({ region: regionId, query, nearLat, nearLng }) {
+  const category = matchCategory(query);
+  if (!category) return null;
+  const region = await loadRegion(regionId);
+  const from = turf.point([parseFloat(nearLng), parseFloat(nearLat)]);
+
+  const results = region.amenities.features
+    .filter((f) => category.match(f.properties))
+    .map((f) => ({
+      label: f.properties.name ? `${f.properties.name} (${category.label})` : category.label,
+      lat: f.geometry.coordinates[1],
+      lng: f.geometry.coordinates[0],
+      distanceM: Math.round(turf.distance(from, f, { units: "meters" })),
+    }))
+    .sort((a, b) => a.distanceM - b.distanceM)
+    .slice(0, 10);
+
+  return { results, categoryLabel: category.label };
+}
+
 async function handleSafeHavens({ region: regionId, lat, lng, time }) {
   const region = await loadRegion(regionId);
   const timeName = getTimeName(time);
@@ -419,6 +443,9 @@ self.onmessage = async (e) => {
         break;
       case "safeHavens":
         result = await handleSafeHavens(payload);
+        break;
+      case "categorySearch":
+        result = await handleCategorySearch(payload);
         break;
       case "regions":
         result = await handleRegions();

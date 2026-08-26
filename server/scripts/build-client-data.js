@@ -197,6 +197,9 @@ function buildAmenities(dataDir, outDir) {
         if (p.shop) props.shop = p.shop;
         if (p.tourism) props.tourism = p.tourism;
         if (p.railway) props.railway = p.railway;
+        if (p.leisure) props.leisure = p.leisure;
+        if (p.public_transport) props.public_transport = p.public_transport;
+        if (p.highway) props.highway = p.highway;
         if (p.name) props.name = p.name;
         if (p.opening_hours) props.opening_hours = p.opening_hours;
         return { type: "Feature", geometry: f.geometry, properties: props };

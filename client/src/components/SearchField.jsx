@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { formatDistance } from "../lib/constants";
 
-export default function SearchField({ placeholder, value, onChange, onSelect, dotClass, region, busy }) {
+export default function SearchField({ placeholder, value, onChange, onSelect, dotClass, region, busy, near }) {
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
@@ -19,12 +20,13 @@ export default function SearchField({ placeholder, value, onChange, onSelect, do
     }
     const handle = setTimeout(() => {
       api
-        .geocode(value, region)
+        .geocode(value, region, near)
         .then((d) => setSuggestions(d.results || []))
         .catch(() => setSuggestions([]));
     }, 350);
     return () => clearTimeout(handle);
-  }, [value, region]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, region, near?.lat, near?.lng]);
 
   const choose = (s) => {
     skipNext.current = true;
@@ -95,7 +97,8 @@ export default function SearchField({ placeholder, value, onChange, onSelect, do
                 choose(s);
               }}
             >
-              {s.label}
+              <span className="suggestion-label">{s.label}</span>
+              {s.distanceM != null && <span className="suggestion-distance">{formatDistance(s.distanceM)}</span>}
             </li>
           ))}
         </ul>
