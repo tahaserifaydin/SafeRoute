@@ -1,0 +1,7 @@
+name = "saferoute"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-01-01"
+
+[[kv_namespaces]]
+binding = "EMERGENCY_KV"
+id = "2026d8e4aa3146d6ba3103245a5c43d5"

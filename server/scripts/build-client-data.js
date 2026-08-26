@@ -54,11 +54,41 @@ function buildRoads(dataDir, outDir) {
   };
 
   fs.mkdirSync(outDir, { recursive: true });
-  const outPath = path.join(outDir, "roads.json");
-  fs.writeFileSync(outPath, JSON.stringify(lite));
-  const sizeMB = (fs.statSync(outPath).size / 1024 / 1024).toFixed(2);
+
+  // Cloudflare Pages dosya başına 25MB sınırı koyuyor (Eindhoven tek parça ~27MB).
+  // Yol ağını bölmek (simplify ile) bağlantı bütünlüğünü bozduğundan (bkz. yukarıdaki
+  // not), bunun yerine veri kaybı olmadan birden fazla dosyaya parçalanıyor; tarayıcı
+  // motoru (worker.js) tüm parçaları çekip tek FeatureCollection'da birleştiriyor.
+  const MAX_SHARD_BYTES = 18 * 1024 * 1024; // güvenlik payı bırakılarak 25MB sınırının altında
+  const shards = [];
+  let current = [];
+  let currentBytes = 0;
+  for (const feature of lite.features) {
+    const featBytes = Buffer.byteLength(JSON.stringify(feature));
+    if (current.length && currentBytes + featBytes > MAX_SHARD_BYTES) {
+      shards.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(feature);
+    currentBytes += featBytes;
+  }
+  if (current.length) shards.push(current);
+
+  shards.forEach((features, i) => {
+    const outPath = path.join(outDir, `roads-${i}.json`);
+    fs.writeFileSync(outPath, JSON.stringify({ type: "FeatureCollection", features }));
+  });
+  fs.writeFileSync(path.join(outDir, "roads-manifest.json"), JSON.stringify({ shardCount: shards.length }));
+
+  const totalSizeMB = (
+    shards.reduce((s, features, i) => s + fs.statSync(path.join(outDir, `roads-${i}.json`)).size, 0) /
+    1024 /
+    1024
+  ).toFixed(2);
   console.log(
-    `  roads.json: ${lite.features.length} segment, koordinat ${coordsBefore}->${coordsAfter}, ${sizeMB}MB`
+    `  roads-*.json: ${lite.features.length} segment, koordinat ${coordsBefore}->${coordsAfter}, ` +
+      `${shards.length} parça, toplam ${totalSizeMB}MB`
   );
 }
 

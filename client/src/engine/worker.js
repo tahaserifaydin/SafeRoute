@@ -64,10 +64,18 @@ function buildSegmentIndex(roadsScored) {
   return { index, cell };
 }
 
+async function loadRoadsScored(id) {
+  const manifest = await fetch(`/data/${id}/roads-manifest.json`).then((r) => r.json());
+  const shards = await Promise.all(
+    Array.from({ length: manifest.shardCount }, (_, i) => fetch(`/data/${id}/roads-${i}.json`).then((r) => r.json()))
+  );
+  return { type: "FeatureCollection", features: shards.flatMap((s) => s.features) };
+}
+
 async function loadRegion(id) {
   if (regionData[id]) return regionData[id];
   const [roadsScored, amenities] = await Promise.all([
-    fetch(`/data/${id}/roads.json`).then((r) => r.json()),
+    loadRoadsScored(id),
     fetch(`/data/${id}/amenities.json`).then((r) => r.json()),
   ]);
   const region = {
