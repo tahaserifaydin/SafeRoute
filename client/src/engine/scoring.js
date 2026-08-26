@@ -199,6 +199,33 @@ export function matchCategory(query) {
   return null;
 }
 
+// --- Yakın yerler: haritada pin olarak gösterilen genel ilgi noktaları
+// (restoran, kafe, market, mağaza vb.) — "Güvenli nokta" özelliğinden farklı,
+// güvenlik amacı yok, sadece "çevremde ne var" sorusuna cevap.
+export const NEARBY_AMENITY_TYPES = {
+  restaurant: { label: "Restoran", emoji: "🍽️" },
+  fast_food: { label: "Fast food", emoji: "🍔" },
+  cafe: { label: "Kafe", emoji: "☕" },
+  bar: { label: "Bar", emoji: "🍺" },
+  pub: { label: "Pub", emoji: "🍺" },
+  nightclub: { label: "Gece kulübü", emoji: "🎶" },
+  biergarten: { label: "Bahçe", emoji: "🍺" },
+  cinema: { label: "Sinema", emoji: "🎬" },
+  theatre: { label: "Tiyatro", emoji: "🎭" },
+};
+const NEARBY_SHOP_MARKET = new Set(["supermarket", "convenience", "grocery", "greengrocer", "bakery", "butcher"]);
+
+export function nearbyPlaceInfo(props) {
+  if (props.amenity && NEARBY_AMENITY_TYPES[props.amenity]) return NEARBY_AMENITY_TYPES[props.amenity];
+  if (props.shop) {
+    if (NEARBY_SHOP_MARKET.has(props.shop)) return { label: "Market", emoji: "🛒" };
+    return { label: "Mağaza", emoji: "🛍️" };
+  }
+  if (props.tourism === "museum") return { label: "Müze", emoji: "🏛️" };
+  if (props.leisure === "park" || props.leisure === "garden") return { label: "Park", emoji: "🌳" };
+  return null;
+}
+
 // --- Isı haritası bantları ---
 export const HEATMAP_BANDS = [
   { max: 35, color: "#dc2626", label: "0-34" },

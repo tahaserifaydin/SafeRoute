@@ -87,4 +87,6 @@ export const engine = {
 
   categorySearch: ({ region, query, near }) =>
     call("categorySearch", { region, query, nearLat: near.lat, nearLng: near.lng }),
+
+  nearbyPlaces: ({ region, lat, lng }) => call("nearbyPlaces", { region, lat, lng }),
 };

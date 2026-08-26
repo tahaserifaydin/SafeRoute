@@ -19,6 +19,7 @@ import {
   reportEffectAt,
   adjustScore,
   matchCategory,
+  nearbyPlaceInfo,
 } from "./scoring.js";
 
 const WALK_SPEED_KMH = 5;
@@ -382,6 +383,32 @@ async function handleCategorySearch({ region: regionId, query, nearLat, nearLng 
   return { results, categoryLabel: category.label };
 }
 
+// "Yakın Yerler": çevredeki restoran/kafe/market/mağaza vb. haritada pin olarak
+// gösterilsin diye — "Güvenli nokta"dan farklı, güvenlik amaçlı değil.
+async function handleNearbyPlaces({ region: regionId, lat, lng }) {
+  const region = await loadRegion(regionId);
+  const from = turf.point([parseFloat(lng), parseFloat(lat)]);
+
+  const places = region.amenities.features
+    .map((f) => {
+      const info = nearbyPlaceInfo(f.properties);
+      if (!info) return null;
+      return {
+        label: info.label,
+        emoji: info.emoji,
+        name: f.properties.name || info.label,
+        lat: f.geometry.coordinates[1],
+        lng: f.geometry.coordinates[0],
+        distanceM: Math.round(turf.distance(from, f, { units: "meters" })),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distanceM - b.distanceM)
+    .slice(0, 40);
+
+  return { places };
+}
+
 async function handleSafeHavens({ region: regionId, lat, lng, time }) {
   const region = await loadRegion(regionId);
   const timeName = getTimeName(time);
@@ -446,6 +473,9 @@ self.onmessage = async (e) => {
         break;
       case "categorySearch":
         result = await handleCategorySearch(payload);
+        break;
+      case "nearbyPlaces":
+        result = await handleNearbyPlaces(payload);
         break;
       case "regions":
         result = await handleRegions();

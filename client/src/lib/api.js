@@ -82,6 +82,8 @@ export const api = {
 
   safeHavens: (opts) => engine.safeHavens(opts),
 
+  nearbyPlaces: (opts) => engine.nearbyPlaces(opts),
+
   heatmap: (region, time) => engine.heatmap(region, time),
 
   reports: (region) => getJson(`/api/reports?region=${region}`),

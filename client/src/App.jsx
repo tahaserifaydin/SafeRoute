@@ -61,6 +61,8 @@ export default function App() {
   // --- Katmanlar ---
   const [havens, setHavens] = useState([]);
   const [showHavens, setShowHavens] = useState(false);
+  const [nearbyPlaces, setNearbyPlaces] = useState([]);
+  const [showNearby, setShowNearby] = useState(false);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [heatmapBands, setHeatmapBands] = useState(null);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
@@ -212,6 +214,17 @@ export default function App() {
       .then((d) => setHavens(d.havens || []))
       .catch(() => setHavens([]));
   }, [showHavens, userPos, start, region, effectiveTime, currentRegion]);
+
+  // --- Yakın yerler: restoran/kafe/market/mağaza vb. (güvenlik amaçlı değil) ---
+  useEffect(() => {
+    if (!showNearby) return;
+    const ref = userPos || start || (currentRegion ? { lat: currentRegion.center[0], lng: currentRegion.center[1] } : null);
+    if (!ref) return;
+    api
+      .nearbyPlaces({ lat: ref.lat, lng: ref.lng, region })
+      .then((d) => setNearbyPlaces(d.places || []))
+      .catch(() => setNearbyPlaces([]));
+  }, [showNearby, userPos, start, region, currentRegion]);
 
   // --- Şehir geneli ısı haritası ---
   useEffect(() => {
@@ -601,6 +614,12 @@ export default function App() {
                   🛟 Güvenli nokta
                 </button>
                 <button
+                  className={`tool-btn ${showNearby ? "active" : ""}`}
+                  onClick={() => setShowNearby((v) => !v)}
+                >
+                  🍽️ Yakın yerler
+                </button>
+                <button
                   className={`tool-btn ${showHeatmap ? "active" : ""}`}
                   onClick={() => setShowHeatmap((v) => !v)}
                 >
@@ -717,6 +736,8 @@ export default function App() {
           layoutTrigger={`${sheetOpen}-${isMobile}`}
           havens={havens}
           showHavens={showHavens}
+          nearbyPlaces={nearbyPlaces}
+          showNearby={showNearby}
           reports={reports}
           onConfirmReport={confirmReport}
           heatmapBands={showHeatmap ? heatmapBands : null}

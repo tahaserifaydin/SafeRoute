@@ -25,6 +25,14 @@ function havenIcon(isOpen) {
   );
 }
 
+const nearbyIconCache = new Map();
+function nearbyIcon(emoji) {
+  if (!nearbyIconCache.has(emoji)) {
+    nearbyIconCache.set(emoji, makeIcon(`<div class="marker-emoji">${emoji}</div>`, 22));
+  }
+  return nearbyIconCache.get(emoji);
+}
+
 function reportIcon(type, trust) {
   const emoji = REPORT_TYPE_ICONS[type] || "⚠️";
   const dim = trust != null && trust < 40 ? "marker-dim" : "";
@@ -116,6 +124,8 @@ export default function RouteMap({
   layoutTrigger,
   havens,
   showHavens,
+  nearbyPlaces,
+  showNearby,
   reports,
   onConfirmReport,
   heatmapBands,
@@ -183,6 +193,17 @@ export default function RouteMap({
               <span style={{ color: h.isOpen ? "#16a34a" : "#dc2626" }}>
                 {h.alwaysOpen ? "7/24 açık" : h.isOpen ? "Şu an açık" : "Şu an kapalı"}
               </span>
+            </Popup>
+          </Marker>
+        ))}
+
+      {showNearby &&
+        nearbyPlaces.map((p, i) => (
+          <Marker key={i} position={[p.lat, p.lng]} icon={nearbyIcon(p.emoji)}>
+            <Popup>
+              <b>{p.name}</b>
+              <br />
+              {p.label} · {formatDistance(p.distanceM)}
             </Popup>
           </Marker>
         ))}
