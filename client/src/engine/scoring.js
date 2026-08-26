@@ -176,6 +176,13 @@ export const CATEGORY_KEYWORDS = [
   { keywords: ["veteriner", "vet"], label: "Veteriner", match: (p) => p.amenity === "veterinary" },
   { keywords: ["diş", "dis", "dentist", "dişçi"], label: "Diş hekimi", match: (p) => p.amenity === "dentist" },
   { keywords: ["otopark", "parking", "park yeri"], label: "Otopark", match: (p) => p.amenity === "parking" },
+  { keywords: ["tamirci", "oto tamir", "tamirhane", "servis", "mekanik", "lastikçi", "lastikci"], label: "Tamirci", match: (p) => ["car_repair", "tyres", "motorcycle"].includes(p.shop) },
+  { keywords: ["kuaför", "kuafor", "berber", "hairdresser"], label: "Kuaför", match: (p) => p.shop === "hairdresser" },
+  { keywords: ["fırın", "firin", "pastane", "bakery"], label: "Fırın", match: (p) => p.shop === "bakery" || p.shop === "pastry" },
+  { keywords: ["kırtasiye", "kirtasiye", "kitapçı", "kitapci", "kitap"], label: "Kitap/Kırtasiye", match: (p) => p.shop === "books" || p.shop === "stationery" },
+  { keywords: ["giyim", "kıyafet", "kiyafet", "clothes"], label: "Giyim", match: (p) => p.shop === "clothes" || p.shop === "shoes" },
+  { keywords: ["elektronik", "telefon", "bilgisayar"], label: "Elektronik", match: (p) => ["electronics", "mobile_phone", "computer", "hifi"].includes(p.shop) },
+  { keywords: ["çiçekçi", "cicekci", "florist"], label: "Çiçekçi", match: (p) => p.shop === "florist" },
 ];
 
 function normalizeTr(s) {
@@ -213,12 +220,37 @@ export const NEARBY_AMENITY_TYPES = {
   cinema: { label: "Sinema", emoji: "🎬" },
   theatre: { label: "Tiyatro", emoji: "🎭" },
 };
-const NEARBY_SHOP_MARKET = new Set(["supermarket", "convenience", "grocery", "greengrocer", "bakery", "butcher"]);
+const NEARBY_SHOP_MARKET = new Set(["supermarket", "convenience", "grocery", "greengrocer", "butcher"]);
+// Google Maps'teki gibi sık aranan mağaza türleri kendi etiket/ikonuyla ayrılıyor;
+// geri kalan onlarca shop=* değeri (OSM'de ~120 farklı tür var) genel "Mağaza"
+// altında toplanıyor — hepsine ayrı ikon vermek yerine en çok aranan ~10 tanesi
+// öne çıkarılıyor.
+const NEARBY_SHOP_LABELS = {
+  bakery: { label: "Fırın", emoji: "🥖" },
+  pastry: { label: "Pastane", emoji: "🍰" },
+  car_repair: { label: "Tamirci", emoji: "🔧" },
+  tyres: { label: "Lastikçi", emoji: "🔧" },
+  motorcycle: { label: "Motosiklet Tamirci", emoji: "🔧" },
+  bicycle: { label: "Bisikletçi", emoji: "🚲" },
+  shoe_repair: { label: "Ayakkabı Tamiri", emoji: "👞" },
+  hairdresser: { label: "Kuaför", emoji: "💇" },
+  clothes: { label: "Giyim", emoji: "👕" },
+  shoes: { label: "Ayakkabı", emoji: "👟" },
+  books: { label: "Kitapçı", emoji: "📚" },
+  stationery: { label: "Kırtasiye", emoji: "✏️" },
+  electronics: { label: "Elektronik", emoji: "🔌" },
+  mobile_phone: { label: "Telefon", emoji: "📱" },
+  computer: { label: "Bilgisayar", emoji: "💻" },
+  florist: { label: "Çiçekçi", emoji: "💐" },
+  optician: { label: "Optisyen", emoji: "👓" },
+  jewelry: { label: "Kuyumcu", emoji: "💍" },
+};
 
 export function nearbyPlaceInfo(props) {
   if (props.amenity && NEARBY_AMENITY_TYPES[props.amenity]) return NEARBY_AMENITY_TYPES[props.amenity];
   if (props.shop) {
     if (NEARBY_SHOP_MARKET.has(props.shop)) return { label: "Market", emoji: "🛒" };
+    if (NEARBY_SHOP_LABELS[props.shop]) return NEARBY_SHOP_LABELS[props.shop];
     return { label: "Mağaza", emoji: "🛍️" };
   }
   if (props.tourism === "museum") return { label: "Müze", emoji: "🏛️" };
