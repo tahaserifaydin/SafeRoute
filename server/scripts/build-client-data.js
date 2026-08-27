@@ -195,6 +195,7 @@ function buildAmenities(dataDir, outDir) {
         const props = {};
         if (p.amenity) props.amenity = p.amenity;
         if (p.shop) props.shop = p.shop;
+        if (p.cuisine) props.cuisine = p.cuisine;
         if (p.tourism) props.tourism = p.tourism;
         if (p.railway) props.railway = p.railway;
         if (p.leisure) props.leisure = p.leisure;

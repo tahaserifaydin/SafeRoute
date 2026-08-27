@@ -21,7 +21,13 @@ if (!regionDir) {
 }
 
 const DATA_DIR = path.join(__dirname, "..", "..", "data", regionDir);
-const MIN_CONFIDENCE = 0.5;
+// 0.5 iken küçük esnaf işletmelerinin çoğunu (zincirlerin aksine tek kaynaktan
+// -genelde Facebook- bilinen, bu yüzden Overture'ın "güven" skoru düşük çıkan
+// yerler) eliyordu — ör. "Burger34", "Balci'nin Yeri Esnaf Lokantası" gibi
+// gerçek işletmeler kayboluyordu. En düşük güvenli (~0.11) kayıtlar bile
+// incelendiğinde hepsi meşru, spesifik işletmelerdi (spam/çöp veri yoktu) —
+// bu yüzden eşik neredeyse tamamen kaldırıldı, sadece adı olma şartı kaldı.
+const MIN_CONFIDENCE = 0.05;
 const DEDUPE_RADIUS_M = 30; // bu yarıçapta zaten bir OSM noktası varsa Overture kopyası eklenmez
 
 // Overture'ın ~1000+ kategorisinin tamamını değil, uygulamanın gerçekten
@@ -35,23 +41,23 @@ const EXACT_MAP = {
   tea_room: { amenity: "cafe" },
   internet_cafe: { amenity: "cafe" },
   restaurant: { amenity: "restaurant" },
-  turkish_restaurant: { amenity: "restaurant" },
-  steakhouse: { amenity: "restaurant" },
+  turkish_restaurant: { amenity: "restaurant", cuisine: "turkish" },
+  steakhouse: { amenity: "restaurant", cuisine: "steak_house" },
   diner: { amenity: "restaurant" },
-  barbecue_restaurant: { amenity: "restaurant" },
-  mediterranean_restaurant: { amenity: "restaurant" },
+  barbecue_restaurant: { amenity: "restaurant", cuisine: "barbecue" },
+  mediterranean_restaurant: { amenity: "restaurant", cuisine: "mediterranean" },
   buffet_restaurant: { amenity: "restaurant" },
-  soup_restaurant: { amenity: "restaurant" },
-  fish_and_chips_restaurant: { amenity: "restaurant" },
-  chicken_restaurant: { amenity: "restaurant" },
-  middle_eastern_restaurant: { amenity: "restaurant" },
-  malaysian_restaurant: { amenity: "restaurant" },
+  soup_restaurant: { amenity: "restaurant", cuisine: "soup" },
+  fish_and_chips_restaurant: { amenity: "restaurant", cuisine: "fish_and_chips" },
+  chicken_restaurant: { amenity: "fast_food", cuisine: "chicken" },
+  middle_eastern_restaurant: { amenity: "restaurant", cuisine: "middle_eastern" },
+  malaysian_restaurant: { amenity: "restaurant", cuisine: "asian" },
   fast_food_restaurant: { amenity: "fast_food" },
-  pizza_restaurant: { amenity: "fast_food" },
-  burger_restaurant: { amenity: "fast_food" },
-  sandwich_shop: { amenity: "fast_food" },
-  bagel_shop: { amenity: "fast_food" },
-  doner_kebab: { amenity: "fast_food" },
+  pizza_restaurant: { amenity: "fast_food", cuisine: "pizza" },
+  burger_restaurant: { amenity: "fast_food", cuisine: "burger" },
+  sandwich_shop: { amenity: "fast_food", cuisine: "sandwich" },
+  bagel_shop: { amenity: "fast_food", cuisine: "sandwich" },
+  doner_kebab: { amenity: "fast_food", cuisine: "kebab" },
   bar: { amenity: "bar" },
   beer_bar: { amenity: "bar" },
   pub: { amenity: "pub" },
@@ -60,9 +66,9 @@ const EXACT_MAP = {
   lounge: { amenity: "nightclub" },
   bakery: { shop: "bakery" },
   desserts: { shop: "pastry" },
-  ice_cream_shop: { shop: "pastry" },
-  chocolatier: { shop: "pastry" },
-  candy_store: { shop: "pastry" },
+  ice_cream_shop: { amenity: "ice_cream" },
+  chocolatier: { shop: "confectionery" },
+  candy_store: { shop: "confectionery" },
   butcher_shop: { shop: "butcher" },
   fishmonger: { shop: "butcher" },
   delicatessen: { shop: "deli" },
@@ -122,6 +128,10 @@ const EXACT_MAP = {
   health_and_medical: { amenity: "clinic" },
   dentist: { amenity: "dentist" },
   veterinarian: { amenity: "veterinary" },
+  nutritionist: { amenity: "doctors" },
+  physical_therapy: { amenity: "doctors" },
+  psychologist: { amenity: "doctors" },
+  speech_therapist: { amenity: "doctors" },
   elementary_school: { amenity: "school" },
   high_school: { amenity: "school" },
   middle_school: { amenity: "school" },
@@ -164,11 +174,27 @@ const EXACT_MAP = {
   theaters_and_performance_venues: { amenity: "theatre" },
   art_gallery: { tourism: "gallery" },
   zoo: { tourism: "zoo" },
+  aquarium: { tourism: "aquarium" },
   museum: { tourism: "museum" },
   hotel: { tourism: "hotel" },
   accommodation: { tourism: "hotel" },
   bed_and_breakfast: { tourism: "guest_house" },
   guest_house: { tourism: "guest_house" },
+  // NOT: "landmark_and_historical_building" kasıtlı olarak eşlenmedi —
+  // Mustafakemalpaşa verisinde incelendiğinde bu kategorideki kayıtların
+  // neredeyse tamamı ("Kardelen Sitesi", "Barış Apartmanı" gibi) sıradan
+  // apartman/site kompleksleriydi, gerçek tarihi/turistik yer değil. Overture
+  // kaynağında bu kategori güvenilmez göründüğünden "gezilecek yer" aramasını
+  // kirletmemesi için dışarıda bırakıldı (yine de shop:"yes" ile ada göre
+  // aranabilir kalıyor).
+  arts_and_entertainment: { tourism: "attraction" },
+  sightseeing_tour_agency: { tourism: "attraction" },
+  public_plaza: { tourism: "attraction" },
+  campground: { tourism: "camp_site" },
+  marina: { tourism: "attraction" },
+  cave: { tourism: "attraction" },
+  hiking_trail: { tourism: "attraction" },
+  viewpoint: { tourism: "viewpoint" },
 };
 
 function mapCategory(cat) {
@@ -206,14 +232,19 @@ function main() {
 
   const osmPath = path.join(DATA_DIR, "amenities.geojson");
   const osm = JSON.parse(fs.readFileSync(osmPath));
-  console.log(`   mevcut OSM amenities: ${osm.features.length}`);
+  // Script daha önce çalıştırılmışsa amenities.geojson zaten Overture ile
+  // birleşmiş olabilir — dedup indeksini SADECE gerçek OSM kaynaklı noktalardan
+  // kur, yoksa önceki çalıştırmada eklenen Overture noktaları "zaten var" sanılıp
+  // hepsi yeniden elenir (script'i ikinci kez çalıştırmayı anlamsız kılar).
+  const osmOnly = osm.features.filter((f) => f.properties?.source !== "overture");
+  console.log(`   mevcut OSM amenities: ${osmOnly.length} (dosyada toplam ${osm.features.length})`);
 
   // Basit ızgara tabanlı yakınlık indeksi — birkaç bin nokta için O(n) yeterli,
   // ayrı bir mekansal kütüphaneye gerek yok.
   const CELL = 0.001; // ~100m
   const osmIndex = new Map();
   const cellKey = (lng, lat) => `${Math.floor(lat / CELL)},${Math.floor(lng / CELL)}`;
-  for (const f of osm.features) {
+  for (const f of osmOnly) {
     if (f.geometry?.type !== "Point") continue;
     const [lng, lat] = f.geometry.coordinates;
     const key = cellKey(lng, lat);

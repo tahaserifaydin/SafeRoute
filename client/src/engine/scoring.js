@@ -156,8 +156,55 @@ export const CATEGORY_KEYWORDS = [
   { keywords: ["okul", "school", "lise", "ilkokul"], label: "Okul", match: (p) => p.amenity === "school" || p.amenity === "kindergarten" },
   { keywords: ["üniversite", "universite", "university", "kampüs"], label: "Üniversite", match: (p) => p.amenity === "university" || p.amenity === "college" },
   { keywords: ["restoran", "restaurant", "yemek", "lokanta"], label: "Restoran", match: (p) => p.amenity === "restaurant" || p.amenity === "fast_food" },
+  // Mutfak/tür bazlı yemek aramaları — "burger", "pizza" gibi yazınca isimde
+  // o kelime geçmese bile o TÜRDEKİ tüm yerler mesafeye göre listelensin diye
+  // (Google Maps'teki gibi). `cuisine` etiketi öncelikli eşleşir (bkz.
+  // fetch-overture-places.js + OSM'in kendi cuisine=* etiketleri); etiket
+  // yoksa isimde geçiyorsa yine de yakalansın diye ada göre de bakılıyor.
+  {
+    keywords: ["pizza", "pizzacı"],
+    label: "Pizza",
+    match: (p) => p.cuisine === "pizza" || (["restaurant", "fast_food"].includes(p.amenity) && /pizza/i.test(p.name || "")),
+  },
+  {
+    keywords: ["burger", "hamburger", "burgerci"],
+    label: "Burger",
+    match: (p) => p.cuisine === "burger" || (["restaurant", "fast_food"].includes(p.amenity) && /burger|hamburger/i.test(p.name || "")),
+  },
+  {
+    keywords: ["kebap", "kebab", "döner", "doner"],
+    label: "Kebap/Döner",
+    match: (p) =>
+      p.cuisine === "kebab" || (["restaurant", "fast_food"].includes(p.amenity) && /kebap|kebab|döner|doner/i.test(p.name || "")),
+  },
+  {
+    keywords: ["tavuk", "chicken", "piliç", "pilic"],
+    label: "Tavuk",
+    match: (p) =>
+      p.cuisine === "chicken" || (["restaurant", "fast_food"].includes(p.amenity) && /tavuk|piliç|pilic|chicken/i.test(p.name || "")),
+  },
+  {
+    keywords: ["pide", "lahmacun"],
+    label: "Pide/Lahmacun",
+    match: (p) => p.cuisine === "turkish" || (["restaurant", "fast_food"].includes(p.amenity) && /pide|lahmacun/i.test(p.name || "")),
+  },
+  {
+    keywords: ["dondurma", "ice cream"],
+    label: "Dondurma",
+    match: (p) => p.amenity === "ice_cream" || /dondurma/i.test(p.name || ""),
+  },
+  {
+    keywords: ["tatlı", "tatlıcı", "baklava", "dessert"],
+    label: "Tatlıcı",
+    match: (p) => p.shop === "pastry" || p.shop === "confectionery" || /tatlı|baklava/i.test(p.name || ""),
+  },
   { keywords: ["kafe", "cafe", "kahve"], label: "Kafe", match: (p) => p.amenity === "cafe" },
   { keywords: ["otel", "hotel", "konaklama"], label: "Otel", match: (p) => p.tourism === "hotel" || p.tourism === "guest_house" },
+  {
+    keywords: ["gezilecek", "turistik", "tarihi", "görülecek", "gorulecek", "attraction"],
+    label: "Gezilecek yer",
+    match: (p) => ["attraction", "viewpoint", "gallery", "zoo", "aquarium", "museum"].includes(p.tourism),
+  },
   { keywords: ["benzinlik", "istasyon", "fuel", "petrol", "akaryakıt"], label: "Benzinlik", match: (p) => p.amenity === "fuel" },
   { keywords: ["park", "yeşil alan"], label: "Park", match: (p) => p.leisure === "park" || p.leisure === "garden" || p.leisure === "playground" },
   { keywords: ["stadyum", "stadium", "saha"], label: "Stadyum", match: (p) => p.leisure === "stadium" || p.leisure === "pitch" },
@@ -183,6 +230,24 @@ export const CATEGORY_KEYWORDS = [
   { keywords: ["giyim", "kıyafet", "kiyafet", "clothes"], label: "Giyim", match: (p) => p.shop === "clothes" || p.shop === "shoes" },
   { keywords: ["elektronik", "telefon", "bilgisayar"], label: "Elektronik", match: (p) => ["electronics", "mobile_phone", "computer", "hifi"].includes(p.shop) },
   { keywords: ["çiçekçi", "cicekci", "florist"], label: "Çiçekçi", match: (p) => p.shop === "florist" },
+  { keywords: ["bar", "birahane", "pub"], label: "Bar", match: (p) => p.amenity === "bar" || p.amenity === "pub" },
+  { keywords: ["gece kulübü", "gece kulubu", "nightclub", "kulüp"], label: "Gece kulübü", match: (p) => p.amenity === "nightclub" },
+  { keywords: ["klinik", "clinic", "doktor", "hekim", "sağlık ocağı"], label: "Klinik", match: (p) => p.amenity === "clinic" || p.amenity === "doctors" },
+  { keywords: ["kasap", "butcher"], label: "Kasap", match: (p) => p.shop === "butcher" },
+  { keywords: ["şarküteri", "sarkuteri", "deli"], label: "Şarküteri", match: (p) => p.shop === "deli" },
+  { keywords: ["kuyumcu", "jewelry", "jewellery"], label: "Kuyumcu", match: (p) => p.shop === "jewelry" },
+  { keywords: ["mobilya", "furniture"], label: "Mobilya", match: (p) => p.shop === "furniture" },
+  { keywords: ["nalbur", "hırdavat", "hirdavat", "hardware"], label: "Nalbur", match: (p) => p.shop === "hardware" },
+  { keywords: ["petshop", "pet shop", "evcil hayvan"], label: "Petshop", match: (p) => p.shop === "pet" },
+  { keywords: ["bisikletçi", "bisikletci", "bicycle", "bisiklet"], label: "Bisikletçi", match: (p) => p.shop === "bicycle" },
+  { keywords: ["halıcı", "halici", "halı", "hali", "carpet"], label: "Halıcı", match: (p) => p.shop === "carpet" },
+  { keywords: ["hediyelik", "hediye", "gift"], label: "Hediyelik eşya", match: (p) => p.shop === "gift" },
+  { keywords: ["havuz", "yüzme havuzu", "swimming pool"], label: "Yüzme havuzu", match: (p) => p.leisure === "swimming_pool" },
+  { keywords: ["belediye", "town hall", "townhall"], label: "Belediye", match: (p) => p.amenity === "townhall" },
+  { keywords: ["semt merkezi", "kültür merkezi", "kultur merkezi", "community centre"], label: "Semt/Kültür merkezi", match: (p) => p.amenity === "community_centre" },
+  { keywords: ["pazar yeri", "pazar", "marketplace"], label: "Pazar yeri", match: (p) => p.amenity === "marketplace" },
+  { keywords: ["kamp", "kamp alanı", "camping", "camp site"], label: "Kamp alanı", match: (p) => p.tourism === "camp_site" },
+  { keywords: ["araç kiralama", "oto kiralama", "car rental"], label: "Araç kiralama", match: (p) => p.amenity === "car_rental" },
 ];
 
 export function normalizeTr(s) {
