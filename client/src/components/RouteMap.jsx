@@ -133,7 +133,7 @@ export default function RouteMap({
   return (
     <MapContainer center={DEFAULT_CENTER} zoom={14} className="map" zoomControl={true}>
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, işletme verisi kısmen &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ClickHandler onPick={onMapClick} />

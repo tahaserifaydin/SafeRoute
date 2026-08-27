@@ -20,6 +20,7 @@ import {
   adjustScore,
   matchCategory,
   nearbyPlaceInfo,
+  normalizeTr,
 } from "./scoring.js";
 
 const WALK_SPEED_KMH = 5;
@@ -388,6 +389,32 @@ async function handleCategorySearch({ region: regionId, query, nearLat, nearLng 
   return { results, categoryLabel: category.label };
 }
 
+// Yazılan metin bir kategori değil (ör. "market" değil, "402 Pizza" gibi
+// belirli bir işletme adı) olduğunda kullanılır. Nominatim (dış, sadece OSM
+// bilir) bunu bilmeyebilir — özellikle Overture Maps ile zenginleştirilmiş
+// (bkz. fetch-overture-places.js) işletmeler Nominatim'de hiç yok. Bu yüzden
+// kendi veri setimizde de ada göre alt-dize eşleşmesi yapılıyor; api.js
+// ikisinin sonucunu birleştiriyor.
+async function handleNameSearch({ region: regionId, query, nearLat, nearLng }) {
+  const region = await loadRegion(regionId);
+  const q = normalizeTr(query);
+  if (q.length < 2) return { results: [] };
+  const from = nearLat != null ? turf.point([parseFloat(nearLng), parseFloat(nearLat)]) : null;
+
+  const results = region.amenities.features
+    .filter((f) => f.properties.name && normalizeTr(f.properties.name).includes(q))
+    .map((f) => ({
+      label: f.properties.name,
+      lat: f.geometry.coordinates[1],
+      lng: f.geometry.coordinates[0],
+      distanceM: from ? Math.round(turf.distance(from, f, { units: "meters" })) : null,
+    }))
+    .sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
+    .slice(0, 8);
+
+  return { results };
+}
+
 // "Yakın Yerler": çevredeki restoran/kafe/market/mağaza vb. haritada pin olarak
 // gösterilsin diye — "Güvenli nokta"dan farklı, güvenlik amaçlı değil.
 async function handleNearbyPlaces({ region: regionId, lat, lng }) {
@@ -526,6 +553,9 @@ self.onmessage = async (e) => {
         break;
       case "categorySearch":
         result = await handleCategorySearch(payload);
+        break;
+      case "nameSearch":
+        result = await handleNameSearch(payload);
         break;
       case "nearbyPlaces":
         result = await handleNearbyPlaces(payload);

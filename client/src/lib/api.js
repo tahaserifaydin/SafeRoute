@@ -68,11 +68,27 @@ async function geocode(q, region, near) {
     if (cat && cat.results.length) return { results: cat.results, isCategory: true };
   }
 
-  const raw = await nominatimSearch(q, region);
-  const results = near
+  // Nominatim yalnızca OSM'i bilir — Overture Maps ile zenginleştirilmiş
+  // işletmeler (bkz. fetch-overture-places.js; Mustafakemalpaşa'da OSM'in
+  // kendisi restoran/kafe gibi yerlerin neredeyse tamamını hiç bilmiyordu)
+  // orada yok. Kendi veri setimizde de ada göre aranır, iki sonuç birleştirilir.
+  const [local, raw] = await Promise.all([
+    engine.nameSearch({ region, query: q, near }).catch(() => ({ results: [] })),
+    nominatimSearch(q, region),
+  ]);
+
+  const nominatimResults = near
     ? raw.map((r) => ({ ...r, distanceM: Math.round(haversineM(near, r)) })).sort((a, b) => a.distanceM - b.distanceM)
     : raw;
-  return { results };
+
+  // Yerel sonuçlar önce gelir; aynı yeri iki kez göstermemek için ~50m
+  // yakınlıktaki Nominatim sonuçları elenir.
+  const merged = [...local.results];
+  for (const r of nominatimResults) {
+    if (!merged.some((m) => haversineM(m, r) < 50)) merged.push(r);
+  }
+  if (near) merged.sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
+  return { results: merged.slice(0, 8) };
 }
 
 const reverseCache = new Map();

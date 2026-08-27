@@ -185,7 +185,7 @@ export const CATEGORY_KEYWORDS = [
   { keywords: ["çiçekçi", "cicekci", "florist"], label: "Çiçekçi", match: (p) => p.shop === "florist" },
 ];
 
-function normalizeTr(s) {
+export function normalizeTr(s) {
   return s
     .toLocaleLowerCase("tr")
     .replace(/ı/g, "i")
