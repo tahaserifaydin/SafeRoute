@@ -249,19 +249,43 @@ function main() {
     const [lng, lat] = f.geometry.coordinates;
     const key = cellKey(lng, lat);
     if (!osmIndex.has(key)) osmIndex.set(key, []);
-    osmIndex.get(key).push([lng, lat]);
+    osmIndex.get(key).push([lng, lat, f.properties?.name]);
   }
-  function hasNearbyOsm(lng, lat) {
+  function normalizeForMatch(s) {
+    return (s || "")
+      .toLocaleLowerCase("tr")
+      .replace(/ı/g, "i")
+      .replace(/[^a-z0-9]/g, "");
+  }
+  function namesLikelyMatch(a, b) {
+    const na = normalizeForMatch(a);
+    const nb = normalizeForMatch(b);
+    if (na.length < 3 || nb.length < 3) return false;
+    if (na === nb) return true;
+    const [short, long] = na.length <= nb.length ? [na, nb] : [nb, na];
+    return long.includes(short);
+  }
+  // 30m yakınlıktaki HERHANGİ bir OSM noktasını "aynı yer" saymak yanlıştı:
+  // yoğun çarşı/sanayi sitesi gibi alanlarda birbirinden tamamen farklı onlarca
+  // işletme birbirine 10-30m mesafede oluyor (ör. "Kardeşler Kuruyemiş" sırf
+  // 27m ötede "A101" var diye elenmiş, "Body Bulding" salonu sırf "BİM"e yakın
+  // diye elenmiş — bir test alanında 244 GERÇEKTEN FARKLI işletme bu yüzden
+  // kaybolmuştu). Artık sadece yakında VE adı benzer bir OSM noktası varsa
+  // gerçek bir çakışma sayılıyor; OSM tarafında isim yoksa (ör. isimsiz bir
+  // POI) kimlik doğrulanamadığından çakışma sayılmıyor, Overture kaydı korunuyor.
+  function findNearbyOsmMatch(lng, lat, name) {
     const cLat = Math.floor(lat / CELL);
     const cLng = Math.floor(lng / CELL);
     for (let dLat = -1; dLat <= 1; dLat++) {
       for (let dLng = -1; dLng <= 1; dLng++) {
         const bucket = osmIndex.get(`${cLat + dLat},${cLng + dLng}`);
         if (!bucket) continue;
-        for (const [olng, olat] of bucket) {
+        for (const [olng, olat, oname] of bucket) {
           const dLatM = (olat - lat) * 111320;
           const dLngM = (olng - lng) * Math.cos((lat * Math.PI) / 180) * 111320;
-          if (Math.sqrt(dLatM * dLatM + dLngM * dLngM) <= DEDUPE_RADIUS_M) return true;
+          if (Math.sqrt(dLatM * dLatM + dLngM * dLngM) <= DEDUPE_RADIUS_M && namesLikelyMatch(oname, name)) {
+            return true;
+          }
         }
       }
     }
@@ -282,7 +306,7 @@ function main() {
     const name = p.names?.primary;
     if (!name) continue;
     const [lng, lat] = f.geometry.coordinates;
-    if (hasNearbyOsm(lng, lat)) {
+    if (findNearbyOsmMatch(lng, lat, name)) {
       skippedDupe++;
       continue;
     }
