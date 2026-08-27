@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { api } from "./lib/api";
@@ -12,26 +12,31 @@ import "./App.css";
 // kaydı (paylaşılan, kalıcı olması gereken kısım) sunucu tarafında (Pages Functions
 // + KV) kalıyor.
 async function generateScenario(region, time) {
-  const { bbox } = await engine.bounds(region);
-  const [minLng, minLat, maxLng, maxLat] = bbox;
   let attempt = 0;
-  while (attempt < 30) {
+  while (attempt < 18) {
     attempt++;
-    const sLat = minLat + Math.random() * (maxLat - minLat);
-    const sLng = minLng + Math.random() * (maxLng - minLng);
-    const eLat = Math.max(minLat, Math.min(maxLat, sLat + (Math.random() - 0.5) * 0.02));
-    const eLng = Math.max(minLng, Math.min(maxLng, sLng + (Math.random() - 0.5) * 0.03));
+    // Noktalar artık tamamen rastgele lat/lng değil, gerçek yol ağı
+    // düğümlerinden seçiliyor (bkz. worker.js handleRandomScenarioPoints) —
+    // aksi halde Mustafakemalpaşa gibi seyrek yol ağlı, büyük bölgelerde
+    // noktalar yola çok uzak düşüp rota ya çöküyor ya da anlamsız oluyordu.
+    const pair = await engine.randomScenarioPoints({ region }).catch(() => null);
+    if (!pair) continue;
     let fastRoute, safeRoute;
     try {
       [fastRoute, safeRoute] = await Promise.all([
-        engine.route({ start: { lat: sLat, lng: sLng }, end: { lat: eLat, lng: eLng }, region, time, safetyPref: 0, accessible: false }).then((r) => r.fast),
-        engine.route({ start: { lat: sLat, lng: sLng }, end: { lat: eLat, lng: eLng }, region, time, safetyPref: 0.25, accessible: false }).then((r) => r.safe),
+        engine.route({ start: pair.start, end: pair.end, region, time, safetyPref: 0, accessible: false }).then((r) => r.fast),
+        engine.route({ start: pair.start, end: pair.end, region, time, safetyPref: 0.25, accessible: false }).then((r) => r.safe),
       ]);
     } catch {
       continue;
     }
-    if (fastRoute.distanceKm < 0.3 || fastRoute.distanceKm > 2.5) continue;
-    if (safeRoute.avgSafetyScore - fastRoute.avgSafetyScore < 5) continue;
+    if (fastRoute.distanceKm < 0.15 || fastRoute.distanceKm > 3) continue;
+    if (fastRoute.avgSafetyScore == null || safeRoute.avgSafetyScore == null) continue;
+    // İki uç nokta arasında ağda tek güzergah varsa (kırsal/seyrek bölgelerde
+    // sık görülüyor) güvenlik tercihi hiçbir şeyi değiştirmez, fast===safe
+    // çıkar; bunu "A/B" diye göstermek anlamsız ve kafa karıştırıcı olur.
+    const gap = safeRoute.avgSafetyScore - fastRoute.avgSafetyScore;
+    if (gap < 5) continue;
     const safeIsA = Math.random() < 0.5;
     const scenarioId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     return {
@@ -43,7 +48,9 @@ async function generateScenario(region, time) {
       safeIsA,
     };
   }
-  throw new Error("Bu bölgede anlamlı bir senaryo bulunamadı, tekrar dene.");
+  throw new Error(
+    "Bu bölgede yol ağı henüz alternatif güzergah üretecek kadar zengin değil, bu yüzden karşılaştırmalı senaryo oluşturulamadı. Başka bir bölge deneyebilir ya da tekrar deneyebilirsin."
+  );
 }
 
 // Tek kaynaktan (engineClient.js) okunur ki yeni bölge eklendiğinde burada
@@ -77,6 +84,7 @@ export default function StudyView() {
   const [results, setResults] = useState(null);
   const [count, setCount] = useState(0);
   const [fitTick, setFitTick] = useState(0);
+  const requestId = useRef(0); // eski (bölge değişmeden önceki) isteğin sonucu yenisini ezmesin diye
 
   // Ana uygulamadaki gibi: konuma en yakın bölge otomatik seçilsin, hep
   // Eindhoven ile açılmasın (kullanıcı Mustafakemalpaşa'yı test merkezi
@@ -103,21 +111,38 @@ export default function StudyView() {
   }, []);
 
   const loadScenario = useCallback(
-    async (attemptsLeft = 3) => {
+    // generateScenario kendi içinde zaten 30 kombinasyon deniyor (bkz. o
+    // fonksiyon) — bunun üstüne eskiden 3 kez daha tam baştan denenmesi
+    // (Mustafakemalpaşa gibi zayıf sonuç veren bölgelerde) "Senaryo
+    // hazırlanıyor…" yazısını 30+ saniye ekranda bırakıyordu. Artık sadece
+    // 1 kez daha (toplam 2 tam deneme) tekrar ediliyor.
+    async (attemptsLeft = 1, myId = ++requestId.current) => {
       setLoading(true);
       setError(null);
       setReveal(null);
+      // Yeni bölge/zaman için yükleme başlarken eski senaryo (ör. önceki
+      // bölgenin rotaları) haritada asılı kalmasın — aksi halde bölge
+      // değiştirildiğinde ya da senaryo bulunamayınca eski (yanlış) bölge
+      // ekranda görünmeye devam ediyordu.
+      if (myId === requestId.current) setScenario(null);
       try {
         const s = await generateScenario(region, time);
+        if (myId !== requestId.current) return; // bölge/zaman bu arada değişti, sonuç eskidi
         setScenario(s);
         setFitTick((t) => t + 1);
+        setLoading(false);
       } catch (err) {
+        if (myId !== requestId.current) return;
         if (attemptsLeft > 0) {
-          loadScenario(attemptsLeft - 1);
+          // loading burada kapatılmıyor — yeniden deneme hâlâ sürüyor;
+          // önceden buradaki finally her durumda loading'i kapattığı için
+          // "Senaryo hazırlanıyor…" mesajı deneme hâlâ devam ederken
+          // kayboluyor, kullanıcı ekranda ne yükleniyor ne hata görmeden
+          // sessizce takılı kalıyordu.
+          loadScenario(attemptsLeft - 1, myId);
           return;
         }
         setError("Senaryo bulunamadı: " + err.message);
-      } finally {
         setLoading(false);
       }
     },

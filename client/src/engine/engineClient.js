@@ -90,4 +90,6 @@ export const engine = {
     call("categorySearch", { region, query, nearLat: near.lat, nearLng: near.lng }),
 
   nearbyPlaces: ({ region, lat, lng }) => call("nearbyPlaces", { region, lat, lng }),
+
+  randomScenarioPoints: ({ region }) => call("randomScenarioPoints", { region }),
 };

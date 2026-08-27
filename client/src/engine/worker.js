@@ -284,7 +284,12 @@ function computeRoute(region, startLng, startLat, endLng, endLat, finder, timeNa
   const endSnap = snapToNetwork(region, endLng, endLat);
 
   const result = finder.findPath(startSnap, endSnap);
-  if (!result) return null;
+  // Başlangıç ve bitiş aynı düğüme denk gelirse (seyrek yol ağı olan
+  // bölgelerde, örn. Mustafakemalpaşa, iki nokta birbirine çok yakınsa)
+  // findPath boş değil ama tek noktalı bir path döndürüyor; turf.lineString
+  // bunu kabul etmiyor ("coordinates must be an array of two or more
+  // positions") ve worker'ı çökertiyordu. "Rota bulunamadı" ile aynı şekilde ele al.
+  if (!result || !result.path || result.path.length < 2) return null;
 
   const line = pathToGeoJSON(result);
   const distanceKm = turf.length(line, { units: "kilometers" });
@@ -447,6 +452,38 @@ async function handleRegions() {
   };
 }
 
+// Çalışma (A/B test) senaryoları için başlangıç/bitiş noktası üretir.
+// Bütün bbox içinde tamamen rastgele lat/lng seçmek Eindhoven gibi küçük/
+// yoğun bölgelerde işe yarıyordu ama Mustafakemalpaşa gibi büyük ve seyrek
+// yol ağlı bölgelerde noktaların çoğu hiçbir yola yakın düşmüyor, en yakın
+// düğüme "ışınlanıyor" (bazen ikisi de aynı düğüme) ve rota ya çöküyor ya da
+// anlamsız oluyor. Bunun yerine gerçek yol ağı düğümlerinden (vertexPoints)
+// örnekleyip aralarında makul (150m-2.2km) yürüme mesafesi olan bir çift
+// buluyoruz — böylece nokta her zaman ağın üzerinde ve karşılıklı ulaşılabilir.
+async function handleRandomScenarioPoints({ region: regionId }) {
+  const region = await loadRegion(regionId);
+  const pts = region.vertexPoints.features;
+  if (pts.length < 2) return null;
+  for (let tries = 0; tries < 40; tries++) {
+    const start = pts[Math.floor(Math.random() * pts.length)];
+    const [slng, slat] = start.geometry.coordinates;
+    const cosLat = Math.cos((slat * Math.PI) / 180);
+    const candidates = pts.filter((p) => {
+      const [elng, elat] = p.geometry.coordinates;
+      const dLat = (elat - slat) * 111320;
+      const dLng = (elng - slng) * cosLat * 111320;
+      const distM = Math.sqrt(dLat * dLat + dLng * dLng);
+      return distM > 150 && distM < 2200;
+    });
+    if (candidates.length) {
+      const end = candidates[Math.floor(Math.random() * candidates.length)];
+      const [elng, elat] = end.geometry.coordinates;
+      return { start: { lat: slat, lng: slng }, end: { lat: elat, lng: elng } };
+    }
+  }
+  return null;
+}
+
 function invalidateReportDependentCaches() {
   finderCache.clear();
   heatmapCache.clear();
@@ -479,6 +516,9 @@ self.onmessage = async (e) => {
         break;
       case "regions":
         result = await handleRegions();
+        break;
+      case "randomScenarioPoints":
+        result = await handleRandomScenarioPoints(payload);
         break;
       case "bounds": {
         // Bölgenin tüm yol ağını indirip işlemeden (loadRegion) sınırları
