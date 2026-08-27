@@ -14,7 +14,12 @@ export const REGIONS = {
   buca: { id: "buca", label: "Buca (İzmir)", center: [38.3666, 27.2115] },
   gaziemir: { id: "gaziemir", label: "Gaziemir (İzmir)", center: [38.3213, 27.1412] },
   alsancak: { id: "alsancak", label: "Alsancak (İzmir)", center: [38.4384, 27.1434] },
-  mustafakemalpasa: { id: "mustafakemalpasa", label: "Mustafakemalpaşa (Bursa)", center: [39.9766, 28.4786] },
+  // Önceki merkez [39.9766, 28.4786] ilçenin (admin_level=6) tüm kırsal
+  // sınırının bbox ortasıydı — gerçek kasaba merkezinden (Adalet/Barış/
+  // Fevzidede/Yalıntaş mahalleleri) ~6.5km güneyde, boş kırsal alana
+  // düşüyordu. Sayfa açılışında/konum eşleştirmede yanlış yeri odaklıyordu.
+  // Bu değer mahalle merkezlerinin ortalaması (Nominatim ile doğrulandı).
+  mustafakemalpasa: { id: "mustafakemalpasa", label: "Mustafakemalpaşa (Bursa)", center: [40.0375, 28.3949] },
 };
 
 function getWorker() {
@@ -91,5 +96,8 @@ export const engine = {
 
   nearbyPlaces: ({ region, lat, lng }) => call("nearbyPlaces", { region, lat, lng }),
 
-  randomScenarioPoints: ({ region }) => call("randomScenarioPoints", { region }),
+  randomScenarioPoints: ({ region }) => {
+    const center = REGIONS[region]?.center;
+    return call("randomScenarioPoints", { region, nearLat: center?.[0], nearLng: center?.[1] });
+  },
 };

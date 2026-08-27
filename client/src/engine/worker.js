@@ -460,10 +460,26 @@ async function handleRegions() {
 // anlamsız oluyor. Bunun yerine gerçek yol ağı düğümlerinden (vertexPoints)
 // örnekleyip aralarında makul (150m-2.2km) yürüme mesafesi olan bir çift
 // buluyoruz — böylece nokta her zaman ağın üzerinde ve karşılıklı ulaşılabilir.
-async function handleRandomScenarioPoints({ region: regionId }) {
+async function handleRandomScenarioPoints({ region: regionId, nearLat, nearLng }) {
   const region = await loadRegion(regionId);
-  const pts = region.vertexPoints.features;
+  let pts = region.vertexPoints.features;
   if (pts.length < 2) return null;
+  // Bölgenin (nüfusun/yerleşimin gerçekten yoğun olduğu) merkezine yakın
+  // düğümlerle sınırlandır — Mustafakemalpaşa gibi çok büyük bir idari sınır
+  // içinde geniş kırsal alanı da kapsayan bölgelerde tamamen rastgele
+  // örnekleme neredeyse hep birbirine bağlantısız/tekil-güzergahlı kırsal
+  // noktalar seçiyordu; oysa asıl yerleşim merkezinde gerçek bir sokak
+  // ızgarası (ve dolayısıyla alternatif güzergah seçenekleri) var.
+  if (nearLat != null && nearLng != null) {
+    const cosC = Math.cos((nearLat * Math.PI) / 180);
+    const core = pts.filter((p) => {
+      const [lng, lat] = p.geometry.coordinates;
+      const dLat = (lat - nearLat) * 111320;
+      const dLng = (lng - nearLng) * cosC * 111320;
+      return Math.sqrt(dLat * dLat + dLng * dLng) < 2500;
+    });
+    if (core.length >= 20) pts = core;
+  }
   for (let tries = 0; tries < 40; tries++) {
     const start = pts[Math.floor(Math.random() * pts.length)];
     const [slng, slat] = start.geometry.coordinates;

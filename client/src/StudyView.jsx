@@ -34,9 +34,14 @@ async function generateScenario(region, time) {
     if (fastRoute.avgSafetyScore == null || safeRoute.avgSafetyScore == null) continue;
     // İki uç nokta arasında ağda tek güzergah varsa (kırsal/seyrek bölgelerde
     // sık görülüyor) güvenlik tercihi hiçbir şeyi değiştirmez, fast===safe
-    // çıkar; bunu "A/B" diye göstermek anlamsız ve kafa karıştırıcı olur.
+    // çıkar; bunu "A/B" diye göstermek anlamsız ve kafa karıştırıcı olur. Eşik
+    // gap>=5'ten gap>=2'ye düşürüldü: Türkiye bölgelerinde puanlama yalnızca
+    // OSM sinyallerine (aydınlatma/kaldırım/yol tipi) dayanıyor, Eindhoven'daki
+    // gibi resmi suç verisi yok — aynı kasaba ızgarası içindeki gerçek
+    // alternatif güzergahlar bile genelde 1-4 puanlık daha ince bir fark
+    // veriyor; 5 eşiği neredeyse hiçbir çifti geçirmiyordu.
     const gap = safeRoute.avgSafetyScore - fastRoute.avgSafetyScore;
-    if (gap < 5) continue;
+    if (gap < 2) continue;
     const safeIsA = Math.random() < 0.5;
     const scenarioId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
     return {

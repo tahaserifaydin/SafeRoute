@@ -33,7 +33,9 @@ const REGIONS = {
   buca: { label: "Buca (İzmir)", dataDir: "buca", center: [38.3666, 27.2115] },
   gaziemir: { label: "Gaziemir (İzmir)", dataDir: "gaziemir", center: [38.3213, 27.1412] },
   alsancak: { label: "Alsancak (İzmir)", dataDir: "alsancak", center: [38.4384, 27.1434] },
-  mustafakemalpasa: { label: "Mustafakemalpaşa (Bursa)", dataDir: "mustafakemalpasa", center: [39.9766, 28.4786] },
+  // Bkz. client/src/engine/engineClient.js aynı satır için not — eski değer
+  // ilçenin tüm kırsal bbox ortasıydı, gerçek kasaba merkezinden ~6.5km güneydeydi.
+  mustafakemalpasa: { label: "Mustafakemalpaşa (Bursa)", dataDir: "mustafakemalpasa", center: [40.0375, 28.3949] },
 };
 
 function currentTimeProfile() {
