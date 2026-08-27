@@ -384,7 +384,10 @@ async function handleCategorySearch({ region: regionId, query, nearLat, nearLng 
       distanceM: Math.round(turf.distance(from, f, { units: "meters" })),
     }))
     .sort((a, b) => a.distanceM - b.distanceM)
-    .slice(0, 10);
+    // "market" gibi çok yaygın kategorilerde onlarca sonuç olabiliyor (ör.
+    // Mustafakemalpaşa'da 86 market) — 10'da kesmek "veri eksik" gibi
+    // görünüyordu; Google Maps'teki gibi daha uzun bir liste gösterilsin.
+    .slice(0, 25);
 
   return { results, categoryLabel: category.label };
 }
@@ -410,7 +413,7 @@ async function handleNameSearch({ region: regionId, query, nearLat, nearLng }) {
       distanceM: from ? Math.round(turf.distance(from, f, { units: "meters" })) : null,
     }))
     .sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
-    .slice(0, 8);
+    .slice(0, 15);
 
   return { results };
 }

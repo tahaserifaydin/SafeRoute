@@ -88,7 +88,7 @@ async function geocode(q, region, near) {
     if (!merged.some((m) => haversineM(m, r) < 50)) merged.push(r);
   }
   if (near) merged.sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
-  return { results: merged.slice(0, 8) };
+  return { results: merged.slice(0, 15) };
 }
 
 const reverseCache = new Map();
