@@ -118,7 +118,6 @@ export const api = {
   emergencyStop: (id) => getJson(`/api/emergency/${id}/stop`, { method: "POST" }),
   emergencyGet: (id) => getJson(`/api/emergency/${id}`),
 
-  studyScenario: (region, time) => getJson(`/api/study/scenario?region=${region}&time=${time}`),
   studyRespond: (body) =>
     getJson("/api/study/respond", {
       method: "POST",

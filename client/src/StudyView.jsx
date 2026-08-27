@@ -2,9 +2,49 @@ import { useCallback, useEffect, useState } from "react";
 import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { api } from "./lib/api";
-import { REGIONS as REGION_CONFIG } from "./engine/engineClient.js";
+import { engine, REGIONS as REGION_CONFIG } from "./engine/engineClient.js";
 import { toLatLngs } from "./lib/constants";
 import "./App.css";
+
+// Senaryo (rastgele nokta çifti + hızlı/güvenli rota) artık tamamen tarayıcıda
+// üretiliyor — canlı (statik) sitede bunun için bir sunucu yoktu, /api/study/scenario
+// SPA fallback HTML döndürüp özelliği baştan sona bozuyordu. Yalnızca yanıt/sonuç
+// kaydı (paylaşılan, kalıcı olması gereken kısım) sunucu tarafında (Pages Functions
+// + KV) kalıyor.
+async function generateScenario(region, time) {
+  const { bbox } = await engine.bounds(region);
+  const [minLng, minLat, maxLng, maxLat] = bbox;
+  let attempt = 0;
+  while (attempt < 30) {
+    attempt++;
+    const sLat = minLat + Math.random() * (maxLat - minLat);
+    const sLng = minLng + Math.random() * (maxLng - minLng);
+    const eLat = Math.max(minLat, Math.min(maxLat, sLat + (Math.random() - 0.5) * 0.02));
+    const eLng = Math.max(minLng, Math.min(maxLng, sLng + (Math.random() - 0.5) * 0.03));
+    let fastRoute, safeRoute;
+    try {
+      [fastRoute, safeRoute] = await Promise.all([
+        engine.route({ start: { lat: sLat, lng: sLng }, end: { lat: eLat, lng: eLng }, region, time, safetyPref: 0, accessible: false }).then((r) => r.fast),
+        engine.route({ start: { lat: sLat, lng: sLng }, end: { lat: eLat, lng: eLng }, region, time, safetyPref: 0.25, accessible: false }).then((r) => r.safe),
+      ]);
+    } catch {
+      continue;
+    }
+    if (fastRoute.distanceKm < 0.3 || fastRoute.distanceKm > 2.5) continue;
+    if (safeRoute.avgSafetyScore - fastRoute.avgSafetyScore < 5) continue;
+    const safeIsA = Math.random() < 0.5;
+    const scenarioId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    return {
+      scenarioId,
+      region,
+      timeProfile: time,
+      routeA: safeIsA ? safeRoute : fastRoute,
+      routeB: safeIsA ? fastRoute : safeRoute,
+      safeIsA,
+    };
+  }
+  throw new Error("Bu bölgede anlamlı bir senaryo bulunamadı, tekrar dene.");
+}
 
 // Tek kaynaktan (engineClient.js) okunur ki yeni bölge eklendiğinde burada
 // unutulup eski hardcoded listeyle çelişmesin (bkz. proje notları: Bornova
@@ -44,7 +84,7 @@ export default function StudyView() {
       setError(null);
       setReveal(null);
       try {
-        const s = await api.studyScenario(region, time);
+        const s = await generateScenario(region, time);
         setScenario(s);
         setFitTick((t) => t + 1);
       } catch (err) {
