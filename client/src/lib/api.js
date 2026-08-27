@@ -16,18 +16,42 @@ function haversineM(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+// Nominatim ücretsiz/paylaşılan bir servis — yoğun kullanımda (aynı IP'den çok
+// istek) geçici olarak 429 (Too Many Requests) döndürüyor. Aynı sorgu tekrar
+// tekrar (kullanıcı bir alanı iki kez ararsa, ya da debounce sırasında art arda
+// tetiklenirse) Nominatim'e gitmesin diye kısa süreli bir önbellek var; 429/5xx
+// gibi geçici hatalarda da bir kez kısa bekleyip tekrar deneniyor.
+const searchCache = new Map(); // "region:q" -> { at, results }
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchWithRetry(url, options, retries = 1) {
+  for (let attempt = 0; ; attempt++) {
+    const r = await fetch(url, options);
+    if (r.ok) return r;
+    if (attempt >= retries || (r.status !== 429 && r.status < 500)) {
+      throw new Error(`HTTP ${r.status}`);
+    }
+    await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
+  }
+}
+
 // Nominatim'e doğrudan tarayıcıdan gidilir (artık aradaki sunucu yok).
 // Bölge bbox'ı motor (worker) üzerinden okunur.
 async function nominatimSearch(q, region) {
+  const cacheKey = `${region}:${q.trim().toLowerCase()}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) return cached.results;
+
   const { bbox } = await engine.bounds(region);
   const viewbox = `${bbox[0]},${bbox[3]},${bbox[2]},${bbox[1]}`;
   const url =
     `https://nominatim.openstreetmap.org/search?format=json&limit=8&addressdetails=0` +
     `&viewbox=${viewbox}&bounded=1&q=${encodeURIComponent(q)}`;
-  const r = await fetch(url, { headers: { "User-Agent": "SafeRoute-thesis-project/1.0 (school project demo)" } });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const r = await fetchWithRetry(url, { headers: { "User-Agent": "SafeRoute-thesis-project/1.0 (school project demo)" } });
   const data = await r.json();
-  return data.map((d) => ({ label: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }));
+  const results = data.map((d) => ({ label: d.display_name, lat: parseFloat(d.lat), lng: parseFloat(d.lon) }));
+  searchCache.set(cacheKey, { at: Date.now(), results });
+  return results;
 }
 
 // Arama: önce "market", "eczane" gibi kategori sözcüğü mü diye bakılır — öyleyse
@@ -57,8 +81,7 @@ async function nominatimReverse(lat, lng) {
   if (reverseCache.has(key)) return { label: reverseCache.get(key) };
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&lat=${lat}&lon=${lng}`;
   try {
-    const r = await fetch(url, { headers: { "User-Agent": "SafeRoute-thesis-project/1.0 (school project demo)" } });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const r = await fetchWithRetry(url, { headers: { "User-Agent": "SafeRoute-thesis-project/1.0 (school project demo)" } });
     const data = await r.json();
     const a = data.address || {};
     const parts = [a.road || a.pedestrian || a.footway || a.neighbourhood, a.suburb || a.city_district, a.city || a.town || a.village];

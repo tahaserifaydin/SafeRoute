@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { api } from "./lib/api";
 import { engine, REGIONS as REGION_CONFIG } from "./engine/engineClient.js";
-import { toLatLngs } from "./lib/constants";
+import { toLatLngs, haversineM } from "./lib/constants";
 import "./App.css";
 
 // Senaryo (rastgele nokta çifti + hızlı/güvenli rota) artık tamamen tarayıcıda
@@ -77,6 +77,30 @@ export default function StudyView() {
   const [results, setResults] = useState(null);
   const [count, setCount] = useState(0);
   const [fitTick, setFitTick] = useState(0);
+
+  // Ana uygulamadaki gibi: konuma en yakın bölge otomatik seçilsin, hep
+  // Eindhoven ile açılmasın (kullanıcı Mustafakemalpaşa'yı test merkezi
+  // yaptı, çalışma sayfası da oraya göre başlamalı).
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        const here = { lat: p.coords.latitude, lng: p.coords.longitude };
+        let nearest = null;
+        let nearestDist = Infinity;
+        for (const r of Object.values(REGION_CONFIG)) {
+          const d = haversineM(here, { lat: r.center[0], lng: r.center[1] });
+          if (d < nearestDist) {
+            nearestDist = d;
+            nearest = r;
+          }
+        }
+        if (nearest) setRegion(nearest.id);
+      },
+      () => {},
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+    );
+  }, []);
 
   const loadScenario = useCallback(
     async (attemptsLeft = 3) => {
