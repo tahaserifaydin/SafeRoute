@@ -54,6 +54,12 @@ export default function App() {
 
   // --- Rota girdileri ---
   const [start, setStart] = useState(urlState.start);
+  // "Nereden" varsayılan olarak kullanıcının canlı konumu olsun ve o hareket
+  // ettikçe TAKİP ETSİN — ama kullanıcı haritaya dokunup ya da arama kutusuna
+  // yazıp KENDİ başlangıç noktasını seçerse artık üzerine yazılmasın. Paylaşılan
+  // bir bağlantıdan (URL) gelen başlangıç noktası da "kullanıcı seçti" sayılır.
+  const startIsAuto = useRef(!urlState.start);
+  const lastAutoStartRef = useRef(null);
   const [end, setEnd] = useState(urlState.end);
   const [startQuery, setStartQuery] = useState("");
   const [endQuery, setEndQuery] = useState("");
@@ -252,6 +258,19 @@ export default function App() {
     if (urlState.end) resolveLabel(urlState.end, setEndQuery, setResolvingEnd);
   }, [resolveLabel]);
 
+  // "Nereden" alanını kullanıcının canlı konumuna otomatik ayarla ve hareket
+  // ettikçe güncelle — kullanıcı kendi başlangıç noktasını seçene kadar (bkz.
+  // startIsAuto). GPS küçük sapmalarla (jitter) sürekli tetiklenmesin diye
+  // sadece son otomatik ayarlanan noktadan gerçekten anlamlı ölçüde
+  // (>40m) uzaklaştıysa güncelleniyor.
+  useEffect(() => {
+    if (!startIsAuto.current || !approxPos) return;
+    if (lastAutoStartRef.current && haversineM(approxPos, lastAutoStartRef.current) < 40) return;
+    lastAutoStartRef.current = approxPos;
+    setStart(approxPos);
+    resolveLabel(approxPos, setStartQuery, setResolvingStart);
+  }, [approxPos, resolveLabel]);
+
   // --- Rota hesapla ---
   useEffect(() => {
     if (!start || !end || !effectiveTime) return;
@@ -330,6 +349,7 @@ export default function App() {
       setInspectedSegment(null);
       setError(null);
       if (!start) {
+        startIsAuto.current = false;
         setStart(point);
         resolveLabel(point, setStartQuery, setResolvingStart);
         setEnd(null);
@@ -339,6 +359,7 @@ export default function App() {
         setEnd(point);
         resolveLabel(point, setEndQuery, setResolvingEnd);
       } else {
+        startIsAuto.current = false;
         setStart(point);
         resolveLabel(point, setStartQuery, setResolvingStart);
         setEnd(null);
@@ -461,9 +482,16 @@ export default function App() {
   // --- Eylemler ---
   const clearAll = () => {
     stopNav();
-    setStart(null);
+    startIsAuto.current = true; // sıfırlanınca "Nereden" tekrar canlı konumu takip etsin
+    lastAutoStartRef.current = approxPos;
+    if (approxPos) {
+      setStart(approxPos);
+      resolveLabel(approxPos, setStartQuery, setResolvingStart);
+    } else {
+      setStart(null);
+      setStartQuery("");
+    }
     setEnd(null);
-    setStartQuery("");
     setEndQuery("");
     setResult(null);
     setError(null);
@@ -530,6 +558,7 @@ export default function App() {
   };
 
   const loadRoute = (r) => {
+    startIsAuto.current = false;
     setRegion(r.region);
     setStart(r.start);
     setEnd(r.end);
@@ -656,6 +685,7 @@ export default function App() {
                 near={nearForStart}
                 busy={resolvingStart}
                 onSelect={(s) => {
+                  startIsAuto.current = false;
                   if (!s) {
                     setStart(null);
                     setResult(null);
