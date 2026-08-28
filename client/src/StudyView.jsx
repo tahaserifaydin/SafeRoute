@@ -220,7 +220,7 @@ export default function StudyView() {
       <div className="study-map-wrap">
         <MapContainer center={[51.44, 5.47]} zoom={14} className="map">
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, işletme verisi kısmen &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a>'
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, işletme verisi kısmen &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a> ve <a href="https://opensource.foursquare.com/os-places/">Foursquare OS Places</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           {scenario && (
