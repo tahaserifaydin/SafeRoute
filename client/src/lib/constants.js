@@ -47,9 +47,9 @@ export const BREAKDOWN_LABELS = {
 export const SAFETY_PREF_LABELS = ["Çok düşük", "Düşük", "Orta", "Yüksek", "Çok yüksek"];
 
 export const SCORE_BANDS = [
-  { max: 35, color: "#dc2626", label: "0–34", name: "Riskli" },
-  { max: 50, color: "#f97316", label: "35–49", name: "Dikkatli ol" },
-  { max: 65, color: "#eab308", label: "50–64", name: "Orta" },
+  { max: 35, color: "#dc2626", label: "0–34", name: "Çok tehlikeli" },
+  { max: 50, color: "#f97316", label: "35–49", name: "Tehlikeli" },
+  { max: 65, color: "#facc15", label: "50–64", name: "Hafif tehlikeli" },
   { max: 80, color: "#84cc16", label: "65–79", name: "İyi" },
   { max: 101, color: "#16a34a", label: "80+", name: "Güvenli" },
 ];
