@@ -133,19 +133,10 @@ export default function RouteMap({
 }) {
   return (
     <MapContainer center={DEFAULT_CENTER} zoom={14} className="map" zoomControl={true}>
-      {/* OSM'in varsayılan "Carto" stili (koyu sarı/turuncu yollar, yoğun
-          etiketler) yerine Esri "World Light Gray Canvas" — Google Maps'e
-          daha yakın, soluk/sade bir zemin; rota rengi (güvenlik skoru) ve
-          pin'ler bu sayede çok daha net öne çıkıyor. (CartoDB'nin ücretsiz
-          raster tile'ları artık "KEY REQUIRED" filigranlı çıkıyordu — Esri'nin
-          bu servisi hâlâ anahtarsız/filigransız.) İki katman: zemin (Base) +
-          üzerine binen sokak/yer adları (Reference). */}
       <TileLayer
-        attribution='&copy; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıda bulunanlar, işletme verisi kısmen &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a> ve <a href="https://opensource.foursquare.com/os-places/">Foursquare OS Places</a>'
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-        maxZoom={19}
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, işletme verisi kısmen &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a> ve <a href="https://opensource.foursquare.com/os-places/">Foursquare OS Places</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
       <ClickHandler onPick={onMapClick} />
       <FlyTo center={regionCenter} trigger={flyTrigger} />
       <FitRoute coords={activeRoute?.route?.geometry?.coordinates} trigger={fitTrigger} />

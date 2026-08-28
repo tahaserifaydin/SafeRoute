@@ -79,11 +79,9 @@ export default function TrackViewer({ id }) {
       </header>
       <MapContainer key={`${data.lat},${data.lng}`} center={[data.lat, data.lng]} zoom={16} className="map">
         <TileLayer
-          attribution='&copy; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıda bulunanlar'
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-          maxZoom={19}
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" maxZoom={19} />
         <Marker position={[data.lat, data.lng]} icon={meIcon} />
         <FixSize />
       </MapContainer>

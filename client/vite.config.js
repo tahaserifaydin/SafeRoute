@@ -50,7 +50,7 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^https:\/\/server\.arcgisonline\.com\/.*/,
+            urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org\/.*/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'saferoute-map-tiles',
