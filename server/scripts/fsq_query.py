@@ -35,9 +35,15 @@ EXACT_CONTAINS = [
     ("bakery", {"shop": "bakery"}),
     ("dessert", {"shop": "pastry"}),
     ("ice cream", {"amenity": "ice_cream"}),
-    ("brewery", {"amenity": "pub"}),
-    ("night club", {"amenity": "nightclub"}),
-    ("bar", {"amenity": "bar"}),
+    # "bar"/"night club"/"brewery" KASITLI OLARAK eşlenmiyor: Foursquare'in bu
+    # kategorisi bu veri setinde güvenilmez çıktı (Mustafakemalpaşa'da "Dining
+    # and Drinking > Bar" diye etiketlenmiş 811 kayıttan çoğu yol adı/çiftlik/
+    # tepe/boş metin gibi tamamen alakasızdı — ör. "Bandırma Eskişehir Yolu",
+    # "kfkdkd"). Yanlış "bar" sayımı, skorlama sistemindeki gece hayatı
+    # cezasını (NIGHTLIFE_PENALTY_WEIGHT) haksız yere şişiriyordu. Foursquare'de
+    # bu kategori için güven skoru da yok, filtrelenemiyor — bu yüzden en
+    # güvenli çözüm hiç eşlememek (yine de shop:"yes" ile ada göre aranabilir).
+    # OSM'in kendi (topluluk tarafından doğrulanmış) bar/pub etiketleri etkilenmiyor.
     ("buffet", {"amenity": "restaurant"}),
     ("grocery store", {"shop": "grocery"}),
     ("convenience store", {"shop": "convenience"}),

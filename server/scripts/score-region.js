@@ -367,7 +367,20 @@ function main() {
       let lightingScore;
       if (f.properties.lit === "yes" || f.properties.lit === "24/7") lightingScore = 100;
       else if (f.properties.lit === "no") lightingScore = 0;
-      else lightingScore = litPrior[highway] ?? 50;
+      else if (f.properties.viirs_rad != null) {
+        // NASA/NOAA VIIRS gece ışığı uydu verisi (bkz. fetch_viirs_lighting.py).
+        // OSM'in `lit` etiketi eksikken (Türkiye'de yolların çoğunda yok) önceden
+        // sadece yol TİPİNİN bölge ortalamasına (litPrior) düşülüyordu — aynı tahmin
+        // o tipteki HER yola uygulanıyordu, konumdan bağımsızdı. VIIRS her segment
+        // için o KONUMA özgü gerçek bir gece parlaklığı ölçümü sağlıyor (~460m
+        // çözünürlük). Radyans (nW/cm²/sr) çok çarpık dağıldığından log ölçekle
+        // 10-95 aralığına sıkıştırılıyor; log10(30) normalizasyonu bu bölgelerde
+        // gözlenen üst yüzdelik dilime (~p99) karşılık geliyor.
+        const rad = Math.max(0, f.properties.viirs_rad);
+        lightingScore = Math.round(
+          Math.max(10, Math.min(95, 10 + (85 * Math.log10(rad + 0.15)) / Math.log10(30)))
+        );
+      } else lightingScore = litPrior[highway] ?? 50;
       const lampCount = countNearby(lampGrid, lat, lng, LAMP_RADIUS_M);
       if (lampCount >= 1) lightingScore = Math.max(lightingScore, 80);
 
