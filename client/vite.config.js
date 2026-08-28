@@ -21,6 +21,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // main.jsx artık virtual:pwa-register ile AÇIKÇA kayıt yapıyor (yeni sürüm
+      // bulununca anında zorla uyguluyor) — vite-plugin-pwa'nın otomatik eklediği
+      // script'in AYRICA kayıt yapıp çift kayda/çelişkiye yol açmaması için kapalı.
+      injectRegister: false,
       // /data/*.json (bölge yol ağları, en büyüğü Eindhoven ~27MB) service worker
       // kurulumunda önden indirilmez (precache) — kullanıcı hiç açmadığı bölge için
       // gereksiz büyük indirme olur. Bunun yerine motor (worker.js) bu dosyaları

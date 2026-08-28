@@ -115,6 +115,10 @@ export default function App() {
     let cancelled = false;
     let ipFallbackTimer = null;
 
+    // İki farklı, anahtar gerektirmeyen sağlayıcı deneniyor — bazı reklam
+    // engelleyiciler/gizlilik uzantıları ya da ağlar IP-konum servislerini
+    // "izleme" sayıp engelleyebiliyor; biri engellense bile diğeri (farklı
+    // domain) genelde çalışıyor.
     function tryIpFallback() {
       fetch("https://ipapi.co/json/")
         .then((r) => r.json())
@@ -122,9 +126,24 @@ export default function App() {
           if (cancelled || approxPosRef.current) return;
           if (typeof d.latitude === "number" && typeof d.longitude === "number") {
             setApproxPos({ lat: d.latitude, lng: d.longitude });
+            return;
           }
+          throw new Error("no coords");
         })
-        .catch(() => {});
+        .catch(() => {
+          if (cancelled || approxPosRef.current) return;
+          fetch("https://get.geojs.io/v1/ip/geo.json")
+            .then((r) => r.json())
+            .then((d) => {
+              if (cancelled || approxPosRef.current) return;
+              const lat = parseFloat(d.latitude);
+              const lng = parseFloat(d.longitude);
+              if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                setApproxPos({ lat, lng });
+              }
+            })
+            .catch(() => {});
+        });
     }
 
     if (!navigator.geolocation) {
