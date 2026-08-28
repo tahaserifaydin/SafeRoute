@@ -38,11 +38,30 @@ def main():
     recent = coll.sort("system:time_start", False).limit(6)
     composite = recent.select("avg_rad").median()
 
+    def clean_pt(c):
+        # Bazı koordinatlar 3 boyutlu (yükseklik dahil) ya da NaN/None içerebiliyor
+        # — bu, tek bir bozuk nokta FeatureCollection'ın TAMAMINI "Invalid
+        # geometry" hatasıyla çökertiyordu (Bornova/Buca/Eindhoven/Nuenen'de
+        # oldu, küçük bölgelerde şans eseri olmadı). Sadece temiz [lng,lat]
+        # çiftleri kabul ediliyor.
+        try:
+            lng, lat = float(c[0]), float(c[1])
+        except (TypeError, ValueError, IndexError):
+            return None
+        if not (math.isfinite(lng) and math.isfinite(lat)):
+            return None
+        if not (-180 <= lng <= 180 and -90 <= lat <= 90):
+            return None
+        return [lng, lat]
+
     def midpoint(coords):
         n = len(coords)
         if n == 2:
-            return [(coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2]
-        return coords[n // 2]
+            a, b = clean_pt(coords[0]), clean_pt(coords[1])
+            if a is None or b is None:
+                return a or b
+            return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+        return clean_pt(coords[n // 2])
 
     features = roads["features"]
     midpoints = [midpoint(f["geometry"]["coordinates"]) for f in features]
@@ -53,7 +72,7 @@ def main():
     for start in range(0, len(midpoints), BATCH_SIZE):
         batch = midpoints[start : start + BATCH_SIZE]
         fc = ee.FeatureCollection(
-            [ee.Feature(ee.Geometry.Point(pt), {"idx": i}) for i, pt in enumerate(batch)]
+            [ee.Feature(ee.Geometry.Point(pt), {"idx": i}) for i, pt in enumerate(batch) if pt is not None]
         )
         sampled = composite.reduceRegions(collection=fc, reducer=ee.Reducer.first(), scale=463.83)
         result = sampled.getInfo()
