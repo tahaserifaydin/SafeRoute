@@ -117,6 +117,7 @@ export default function RouteMap({
   onMapClick,
   onSegmentClick,
   userPos,
+  approxPos,
   navActive,
   regionCenter,
   flyTrigger,
@@ -146,7 +147,14 @@ export default function RouteMap({
 
       {start && <Marker position={[start.lat, start.lng]} icon={startIcon} />}
       {end && <Marker position={[end.lat, end.lng]} icon={endIcon} />}
-      {navActive && userPos && <Marker position={[userPos.lat, userPos.lng]} icon={meIcon} />}
+      {/* Navigasyon sırasında yüksek hassasiyetli userPos (watchPosition), aksi
+          halde genel canlı konum (approxPos) — "ben buradayım" işareti artık
+          sadece navigasyon sırasında değil, her zaman gösteriliyor. */}
+      {navActive && userPos ? (
+        <Marker position={[userPos.lat, userPos.lng]} icon={meIcon} />
+      ) : (
+        approxPos && <Marker position={[approxPos.lat, approxPos.lng]} icon={meIcon} />
+      )}
 
       {/* Seçilmeyen alternatif rota, soluk gösterilir */}
       {result &&

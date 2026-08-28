@@ -893,6 +893,7 @@ export default function App() {
           onMapClick={handleMapClick}
           onSegmentClick={handleSegmentClick}
           userPos={userPos}
+          approxPos={approxPos}
           navActive={navActive}
           regionCenter={currentRegion?.center}
           flyTrigger={flyTrigger}
