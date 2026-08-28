@@ -543,6 +543,11 @@ export default function App() {
       const d = await api.reports(region);
       setReports(d.reports || []);
       showToast("Teyidin kaydedildi.");
+      // submitReport'taki gibi: teyit güven skorunu (dolayısıyla rapor
+      // ağırlığını) artırıyor ama bu, ekrandaki mevcut rota otomatik
+      // yeniden hesaplanmadan görünmüyordu — kullanıcı teyit ettiğinde
+      // rotanın rengi/skoru hiç değişmiyormuş gibi görünüyordu.
+      if (start && end) setSafetyPref((p) => p + 1e-9);
     } catch (err) {
       setError("Teyit gönderilemedi: " + err.message);
     }
