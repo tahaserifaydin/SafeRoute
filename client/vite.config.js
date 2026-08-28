@@ -27,6 +27,13 @@ export default defineConfig({
       // ilk rota isteğinde normal fetch ile çeker; burada sadece o isteği runtime'da
       // yakalayıp CacheFirst ile diske yazıyoruz ki ikinci ziyarette/offline'da hazır olsun.
       workbox: {
+        // Varsayılan davranışta, yeni bir service worker kurulsa bile ESKİ sekmeler
+        // kapatılıp site yeniden açılana kadar "waiting" durumunda bekliyordu — bu
+        // yüzden kullanıcılar bugünkü düzeltmeleri (ör. konum tespiti) görmek için
+        // siteyi tamamen kapatıp açmak zorunda kalıyordu. skipWaiting + clientsClaim
+        // yeni sürümün açık sekmelerde bile hemen devralmasını sağlıyor.
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         runtimeCaching: [
           {

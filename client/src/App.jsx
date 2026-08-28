@@ -36,6 +36,17 @@ export default function App() {
   const [regions, setRegions] = useState([]);
   const [region, setRegion] = useState(urlState.region || "eindhoven");
   const autoRegionDone = useRef(hadExplicitRegion); // true ise bir daha otomatik seçim denenmez
+  // Bölge state'i teknik olarak hâlâ "eindhoven" ile başlıyor (26 yerde
+  // kullanıldığından hepsini null'a hazırlamak riskli), ama kullanıcı bunu
+  // GÖRMESİN diye konum belirlenene kadar (ya da 7sn içinde belirlenemezse)
+  // tüm arayüz yerine basit bir yükleniyor ekranı gösteriliyor — "önce
+  // Eindhoven sonra gerçek konum" yanıp sönmesi tamamen ortadan kalkıyor.
+  const [locationReady, setLocationReady] = useState(hadExplicitRegion);
+  useEffect(() => {
+    if (locationReady) return;
+    const t = setTimeout(() => setLocationReady(true), 7000);
+    return () => clearTimeout(t);
+  }, [locationReady]);
   const [timeMode, setTimeMode] = useState(urlState.timeMode || "auto");
   const [autoTimeProfile, setAutoTimeProfile] = useState(localTimeProfile());
   const [flyTrigger, setFlyTrigger] = useState(0);
@@ -211,6 +222,7 @@ export default function App() {
       setRegion(nearest.id);
       setFlyTrigger((t) => t + 1);
     }
+    setLocationReady(true);
   }, [approxPos, regions, region]);
 
   useEffect(() => {
@@ -539,6 +551,36 @@ export default function App() {
         { id: "eindhoven", label: "Eindhoven" },
         { id: "nuenen", label: "Nuenen" },
       ];
+
+  if (!locationReady) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 12,
+          height: "100dvh",
+          background: "var(--bg)",
+          color: "var(--text-dim)",
+        }}
+      >
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            border: "3px solid var(--surface-2)",
+            borderTopColor: "var(--text-dim)",
+            animation: "saferoute-spin 0.8s linear infinite",
+          }}
+        />
+        <div>Konumun belirleniyor…</div>
+        <style>{"@keyframes saferoute-spin { to { transform: rotate(360deg); } }"}</style>
+      </div>
+    );
+  }
 
   return (
     <div className={`app ${isMobile ? "mobile" : ""}`}>
