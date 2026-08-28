@@ -3,7 +3,20 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
+// Bölge verisi (amenities.json, roads-*.json) service worker'da CacheFirst +
+// 30 gün ile önbelleğe alınıyor (bkz. aşağıdaki runtimeCaching notu). Bu
+// dosyalar bugün onlarca kez güncellendi ama URL'leri hiç değişmediği için
+// eski ziyaretçilerin tarayıcısı ay(lar) sonra bile eski veriyi sunmaya devam
+// ediyordu (ör. "burger"/"pizza" araması kategori desteği eklenmeden önceki
+// sürümde hiç sonuç vermiyordu). Her build'de değişen bu değer worker.js'te
+// fetch URL'lerine eklenir, farklı URL = farklı önbellek anahtarı = otomatik
+// geçersiz kılma.
+const DATA_VERSION = JSON.stringify(Date.now().toString(36));
+
 export default defineConfig({
+  define: {
+    __DATA_VERSION__: DATA_VERSION,
+  },
   plugins: [
     react(),
     VitePWA({

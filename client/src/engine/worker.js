@@ -67,10 +67,18 @@ function buildSegmentIndex(roadsScored) {
   return { index, cell };
 }
 
+// Service worker bu dosyaları CacheFirst + 30 gün ile önbelleğe alıyor (bkz.
+// vite.config.js). Veri her deploy'da değişebiliyor ama dosya YOLU aynı
+// kalınca eski ziyaretçiler ay(lar) sonra bile eski (ör. yeni kategori
+// desteği eklenmeden önceki) veriyi görmeye devam ediyordu. Build zamanında
+// değişen bu sürüm parametresi URL'yi (dolayısıyla önbellek anahtarını)
+// her yeni deploy'da otomatik değiştirir.
+const DATA_V = `v=${__DATA_VERSION__}`;
+
 async function loadRoadsScored(id) {
-  const manifest = await fetch(`/data/${id}/roads-manifest.json`).then((r) => r.json());
+  const manifest = await fetch(`/data/${id}/roads-manifest.json?${DATA_V}`).then((r) => r.json());
   const shards = await Promise.all(
-    Array.from({ length: manifest.shardCount }, (_, i) => fetch(`/data/${id}/roads-${i}.json`).then((r) => r.json()))
+    Array.from({ length: manifest.shardCount }, (_, i) => fetch(`/data/${id}/roads-${i}.json?${DATA_V}`).then((r) => r.json()))
   );
   return { type: "FeatureCollection", features: shards.flatMap((s) => s.features) };
 }
@@ -79,7 +87,7 @@ const metaCache = {};
 async function loadMeta(id) {
   if (regionData[id]) return { bbox: regionData[id].bbox };
   if (metaCache[id]) return metaCache[id];
-  const meta = await fetch(`/data/${id}/meta.json`).then((r) => r.json());
+  const meta = await fetch(`/data/${id}/meta.json?${DATA_V}`).then((r) => r.json());
   metaCache[id] = meta;
   return meta;
 }
@@ -88,7 +96,7 @@ async function loadRegion(id) {
   if (regionData[id]) return regionData[id];
   const [roadsScored, amenities] = await Promise.all([
     loadRoadsScored(id),
-    fetch(`/data/${id}/amenities.json`).then((r) => r.json()),
+    fetch(`/data/${id}/amenities.json?${DATA_V}`).then((r) => r.json()),
   ]);
   const region = {
     id,
