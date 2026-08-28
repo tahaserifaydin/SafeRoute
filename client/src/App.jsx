@@ -79,17 +79,64 @@ export default function App() {
   const [navActive, setNavActive] = useState(false);
   const [navIsSim, setNavIsSim] = useState(false);
   const [userPos, setUserPos] = useState(null);
-  // Navigasyon dışında da (arama kutusunu mesafeye göre sıralamak için) kaba bir
-  // konuma ihtiyaç var; watchPosition gibi sürekli izleme yerine tek seferlik,
-  // sessizce başarısız olabilen hafif bir istek yeterli.
+  // Navigasyon dışında da (arama kutusunu mesafeye göre sıralamak, bölgeyi
+  // otomatik seçmek için) kaba bir konuma ihtiyaç var. Düşük güçlü sürekli
+  // izleme (watchPosition) kullanılıyor — tek seferlik getCurrentPosition izin
+  // isteği bir kere başarısız/zaman aşımına uğradığında (ör. tarayıcı konum
+  // isteğini ilk anda yanıtlayamadıysa) bir daha HİÇ denemiyordu, bu da
+  // sayfanın kalıcı olarak Eindhoven varsayılanında takılı kalmasına yol
+  // açıyordu. Konum izni tamamen REDDEDİLMİŞSE (ör. bu tarayıcıda/ortamda)
+  // watchPosition de asla tetiklenmez — o durumda kullanıcının IP'sinden kaba
+  // bir konum tahmini alan ücretsiz bir servise (ipapi.co, anahtar gerekmez)
+  // tek seferlik başvuruluyor, en azından doğru ÜLKE/şehir civarına düşsün.
   const [approxPos, setApproxPos] = useState(null);
+  const approxPosRef = useRef(null);
   useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (p) => setApproxPos({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+    approxPosRef.current = approxPos;
+  }, [approxPos]);
+  useEffect(() => {
+    let cancelled = false;
+    let ipFallbackTimer = null;
+
+    function tryIpFallback() {
+      fetch("https://ipapi.co/json/")
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled || approxPosRef.current) return;
+          if (typeof d.latitude === "number" && typeof d.longitude === "number") {
+            setApproxPos({ lat: d.latitude, lng: d.longitude });
+          }
+        })
+        .catch(() => {});
+    }
+
+    if (!navigator.geolocation) {
+      tryIpFallback();
+      return;
+    }
+    // Tarayıcı konumu birkaç saniye içinde gelmezse (izin isteği asılı kalmış,
+    // kullanıcı henüz karar vermemiş olabilir) IP tahminiyle en azından bölgeyi
+    // kabaca doğru seçelim; gerçek konum sonradan gelirse zaten üzerine yazar.
+    ipFallbackTimer = setTimeout(tryIpFallback, 4000);
+
+    const watchId = navigator.geolocation.watchPosition(
+      (p) => {
+        if (cancelled) return;
+        clearTimeout(ipFallbackTimer);
+        setApproxPos({ lat: p.coords.latitude, lng: p.coords.longitude });
+      },
+      () => {
+        // izin reddedildi ya da hata verdi — IP yedeğini hemen dene, 4sn beklemeye gerek yok
+        clearTimeout(ipFallbackTimer);
+        tryIpFallback();
+      },
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 8000 }
     );
+    return () => {
+      cancelled = true;
+      clearTimeout(ipFallbackTimer);
+      navigator.geolocation.clearWatch(watchId);
+    };
   }, []);
   const [stepIndex, setStepIndex] = useState(0);
   const [voiceEnabled, setVoiceEnabled] = useState(() => localStorage.getItem("saferoute.voice") !== "off");
