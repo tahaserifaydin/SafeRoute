@@ -9,6 +9,7 @@ import {
   getTimeName,
   TIME_PROFILE_HOURS,
   ACCESSIBLE_HIGHWAY_PENALTY,
+  WET_HIGHWAY_PENALTY,
   SAFE_HAVEN_TYPES,
   SAFE_HAVEN_SHOPS,
   SAFE_HAVEN_OTHER,
@@ -114,7 +115,7 @@ function getWeightedReportsFor(regionId) {
   return weightedReports(currentReports.filter((r) => r.region === regionId));
 }
 
-function buildFinder(region, scoreField, alpha, accessible) {
+function buildFinder(region, scoreField, alpha, accessible, wet) {
   const weighted = getWeightedReportsFor(region.id);
   return new PathFinder(region.roadsScored, {
     weight: (a, b, props) => {
@@ -125,6 +126,10 @@ function buildFinder(region, scoreField, alpha, accessible) {
       let cost = distanceKm * (1 + alpha * penalty);
       if (accessible) {
         const mult = ACCESSIBLE_HIGHWAY_PENALTY[props.highway];
+        if (mult) cost *= mult;
+      }
+      if (wet) {
+        const mult = WET_HIGHWAY_PENALTY[props.highway];
         if (mult) cost *= mult;
       }
       return cost;
@@ -142,15 +147,15 @@ function buildFinder(region, scoreField, alpha, accessible) {
   });
 }
 
-function getFinder(region, timeName, alpha, accessible) {
-  const key = `${region.id}:${timeName}:${alpha}:${accessible ? "a" : "n"}`;
+function getFinder(region, timeName, alpha, accessible, wet) {
+  const key = `${region.id}:${timeName}:${alpha}:${accessible ? "a" : "n"}:${wet ? "w" : "d"}`;
   const cached = finderCache.get(key);
   if (cached) {
     finderCache.delete(key);
     finderCache.set(key, cached);
     return cached;
   }
-  const finder = buildFinder(region, `s_${timeName}`, alpha, accessible);
+  const finder = buildFinder(region, `s_${timeName}`, alpha, accessible, wet);
   finderCache.set(key, finder);
   while (finderCache.size > MAX_CACHED_FINDERS) {
     finderCache.delete(finderCache.keys().next().value);
@@ -345,18 +350,19 @@ function buildHeatmap(region, timeName) {
 }
 const heatmapCache = new Map();
 
-async function handleRoute({ region: regionId, startLat, startLng, endLat, endLng, time, safetyPref, accessible }) {
+async function handleRoute({ region: regionId, startLat, startLng, endLat, endLng, time, safetyPref, accessible, wet }) {
   const region = await loadRegion(regionId);
   const timeName = getTimeName(time);
   const alpha = alphaFromPreference(parseFloat(safetyPref));
   const isAccessible = !!accessible;
+  const isWet = !!wet;
   const sLng = parseFloat(startLng);
   const sLat = parseFloat(startLat);
   const eLng = parseFloat(endLng);
   const eLat = parseFloat(endLat);
 
-  const fastFinder = getFinder(region, timeName, 0, isAccessible);
-  const safeFinder = getFinder(region, timeName, alpha, isAccessible);
+  const fastFinder = getFinder(region, timeName, 0, isAccessible, isWet);
+  const safeFinder = getFinder(region, timeName, alpha, isAccessible, isWet);
   const fastRoute = computeRoute(region, sLng, sLat, eLng, eLat, fastFinder, timeName);
   const safeRoute = computeRoute(region, sLng, sLat, eLng, eLat, safeFinder, timeName);
 

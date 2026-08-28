@@ -67,6 +67,13 @@ export default function App() {
   const [resolvingEnd, setResolvingEnd] = useState(false);
   const [safetyPref, setSafetyPref] = useState(urlState.safetyPref ?? 0.6);
   const [accessibleMode, setAccessibleMode] = useState(false);
+  // --- Hava durumu (ıslak mod) ---
+  // Yağmur/kar yağarken merdiven vb. kayma riski taşıyan yollar rota
+  // hesabında otomatik cezalandırılıyor (bkz. WET_HIGHWAY_PENALTY,
+  // scoring.js). Kullanıcı açıp kapatmıyor — sadece şeffaflık için bildiriliyor.
+  const [isWet, setIsWet] = useState(false);
+  const [wetKind, setWetKind] = useState(null); // "rain" | "snow" | null
+  const [temperature, setTemperature] = useState(null);
 
   // --- Sonuç ---
   const [result, setResult] = useState(null);
@@ -217,6 +224,45 @@ export default function App() {
     setTimeout(() => setToast(null), 2600);
   }, []);
 
+  // Bölge merkezi için güncel yağış durumunu sorgula (API anahtarı gerekmeyen
+  // Open-Meteo). Rota içindeki her nokta için değil, bölge geneli tek bir
+  // hava durumu kabul ediliyor — bu ölçekte (ilçe/kasaba) yeterli.
+  const wetLat = regionCenterPt?.lat;
+  const wetLng = regionCenterPt?.lng;
+  useEffect(() => {
+    if (wetLat == null || wetLng == null) return;
+    let cancelled = false;
+    const checkWeather = () => {
+      fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${wetLat}&longitude=${wetLng}&current=precipitation,rain,snowfall,temperature_2m`
+      )
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          const rain = d?.current?.rain ?? 0;
+          const snow = d?.current?.snowfall ?? 0;
+          setIsWet(rain > 0 || snow > 0);
+          setWetKind(snow > 0 ? "snow" : rain > 0 ? "rain" : null);
+          setTemperature(d?.current?.temperature_2m ?? null);
+        })
+        .catch(() => {
+          // Hava durumu servisine ulaşılamıyorsa sessizce normal (kuru) moda düş —
+          // rota hesaplamasını bu yüzden bloklamaya değmez.
+          if (!cancelled) {
+            setIsWet(false);
+            setWetKind(null);
+            setTemperature(null);
+          }
+        });
+    };
+    checkWeather();
+    const iv = setInterval(checkWeather, 10 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [wetLat, wetLng]);
+
   // --- Başlangıç verileri ---
   useEffect(() => {
     api
@@ -303,7 +349,7 @@ export default function App() {
     }, 1200);
 
     api
-      .route({ start, end, region, time: effectiveTime, safetyPref, accessible: accessibleMode })
+      .route({ start, end, region, time: effectiveTime, safetyPref, accessible: accessibleMode, wet: isWet })
       .then((data) => {
         if (myId !== requestId.current) return;
         setResult(data);
@@ -322,7 +368,7 @@ export default function App() {
       });
 
     return () => clearTimeout(slowTimer);
-  }, [start, end, region, effectiveTime, safetyPref, accessibleMode]);
+  }, [start, end, region, effectiveTime, safetyPref, accessibleMode, isWet]);
 
   // --- Güvenli noktalar (saate duyarlı) ---
   useEffect(() => {
@@ -775,6 +821,14 @@ export default function App() {
                 </div>
               )}
 
+              {isWet && (
+                <div className="status">
+                  {wetKind === "snow" ? "❄️" : "🌧️"} {wetKind === "snow" ? "Kar" : "Yağmur"} yağıyor
+                  {temperature != null ? ` (${Math.round(temperature)}°C)` : ""} — merdiven ve
+                  toprak/kaplamasız yollar rota hesabında cezalandırılıyor.
+                </div>
+              )}
+
               <div className="toolbar">
                 <button
                   className={`tool-btn ${showHavens ? "active" : ""}`}
@@ -912,6 +966,12 @@ export default function App() {
           onConfirmReport={confirmReport}
           heatmapBands={showHeatmap ? heatmapBands : null}
         />
+        {isWet && <div className={`map-weather-fx ${wetKind === "snow" ? "snow" : "rain"}`} aria-hidden="true" />}
+        {temperature != null && (
+          <div className="map-weather-badge">
+            {wetKind === "snow" ? "❄️" : wetKind === "rain" ? "🌧️" : "🌡️"} {Math.round(temperature)}°C
+          </div>
+        )}
         {reportMode && <div className="map-mode-badge">Bildirme modu — haritaya dokun</div>}
         {showHeatmap && (
           <div className="heatmap-legend">

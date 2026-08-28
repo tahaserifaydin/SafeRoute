@@ -31,6 +31,13 @@ export function alphaFromPreference(pref) {
 // yollar orta düzeyde cezalandırılır.
 export const ACCESSIBLE_HIGHWAY_PENALTY = { steps: 50, path: 2.5, track: 3 };
 
+// Yağmur/kar aktifken: ıslak merdiven düşme riski gerçek ve ciddi (tamamen
+// yasaklanmaz ama güçlü caydırılır), kaplamasız/toprak yollar da çamur/kayma
+// riskiyle orta düzeyde cezalandırılır. Eğim (rampa) verisi elimizde yok
+// (yükseklik/DEM verisi entegre değil) — bu yüzden sadece etiketle net olarak
+// tespit edilebilen highway=steps/path/track için uygulanıyor.
+export const WET_HIGHWAY_PENALTY = { steps: 4, path: 1.4, track: 1.5 };
+
 // --- Sığınılabilecek noktalar ---
 export const SAFE_HAVEN_TYPES = {
   police: { label: "Polis", always: true },

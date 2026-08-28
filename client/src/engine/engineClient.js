@@ -73,7 +73,7 @@ export const engine = {
     currentTimeProfile: currentTimeProfile(),
   }),
 
-  route: ({ start, end, region, time, safetyPref, accessible }) =>
+  route: ({ start, end, region, time, safetyPref, accessible, wet }) =>
     call("route", {
       region,
       startLat: start.lat,
@@ -83,6 +83,7 @@ export const engine = {
       time,
       safetyPref,
       accessible: !!accessible,
+      wet: !!wet,
     }),
 
   safeHavens: ({ lat, lng, region, time }) => call("safeHavens", { lat, lng, region, time }),

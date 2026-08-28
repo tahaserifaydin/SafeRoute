@@ -1,6 +1,20 @@
 import { scoreColor, scoreName } from "../lib/constants";
 
+// Rota boyunca bir kırılım alanının (aydınlatma, yaya altyapısı...) uzunluk
+// ağırlıklı ortalaması — tek bir segmentin skoru değil, tüm rotanın genel
+// karakterini gösterir (bkz. worker.js buildSegments: her segment kendi
+// breakdown'ını taşıyor).
+function avgBreakdownStat(route, key) {
+  const scored = (route.segments || []).filter((s) => s.breakdown && s.breakdown[key] != null);
+  if (!scored.length) return null;
+  const totalLen = scored.reduce((sum, s) => sum + s.lengthKm, 0);
+  if (!totalLen) return null;
+  return Math.round(scored.reduce((sum, s) => sum + s.breakdown[key] * s.lengthKm, 0) / totalLen);
+}
+
 function Card({ id, title, dotClass, route, selected, onSelect }) {
+  const lighting = avgBreakdownStat(route, "lighting");
+  const pedInfra = avgBreakdownStat(route, "pedInfra");
   return (
     <button
       className={`route-card ${id} ${selected ? "selected" : ""}`}
@@ -22,6 +36,12 @@ function Card({ id, title, dotClass, route, selected, onSelect }) {
           <b style={{ color: scoreColor(route.minSafetyScore) }}>{route.minSafetyScore ?? "-"}</b> en düşük
         </span>
       </div>
+      {(lighting != null || pedInfra != null) && (
+        <div className="route-card-breakdown">
+          {lighting != null && <span>💡 %{lighting} aydınlık</span>}
+          {pedInfra != null && <span>🚶 %{pedInfra} kaldırım</span>}
+        </div>
+      )}
     </button>
   );
 }
