@@ -216,6 +216,11 @@ export default function App() {
   // sağlar). "Nereye" alanı için başlangıç noktası seçilmişse oradan mesafe daha
   // anlamlı (Google Maps de varış araması için başlangıçtan mesafe gösterir).
   const regionCenterPt = currentRegion ? { lat: currentRegion.center[0], lng: currentRegion.center[1] } : null;
+  // effect deps için: regionCenterPt her render'da yeni bir nesne olduğundan,
+  // ona bağlı bir efekt region GERÇEKTEN değişmese bile her render'da yeniden
+  // tetiklenir (ör. gereksiz tekrar tekrar reverse-geocode isteği).
+  const regionCenterLat = regionCenterPt?.lat;
+  const regionCenterLng = regionCenterPt?.lng;
   const nearForStart = userPos || approxPos || regionCenterPt;
   const nearForEnd = start || userPos || approxPos || regionCenterPt;
 
@@ -343,13 +348,28 @@ export default function App() {
   // startIsAuto). GPS küçük sapmalarla (jitter) sürekli tetiklenmesin diye
   // sadece son otomatik ayarlanan noktadan gerçekten anlamlı ölçüde
   // (>40m) uzaklaştıysa güncelleniyor.
+  // Gerçek konum, görüntülenen bölgeden çok uzaksa (ör. demo Mustafakemalpaşa'yı
+  // başka bir şehirden test ediyorsa) o konumu doğrudan "Nereden" yapmak,
+  // haritada (bölge merkezinde açık) hiç görünmeyen, bölgeyle alakasız bir
+  // başlangıç adresi gösteriyordu — bu durumda bölge merkezi kullanılır.
   useEffect(() => {
-    if (!startIsAuto.current || !approxPos) return;
-    if (lastAutoStartRef.current && haversineM(approxPos, lastAutoStartRef.current) < 40) return;
-    lastAutoStartRef.current = approxPos;
-    setStart(approxPos);
-    resolveLabel(approxPos, setStartQuery, setResolvingStart);
-  }, [approxPos, resolveLabel]);
+    // locationReady'den önce region hâlâ geçici varsayılanda (eindhoven) olabilir;
+    // o an regionCenterPt'e göre karar vermek, bölge otomatik düzeltilmeden hemen
+    // önce yanlış (varsayılan bölgeye ait) bir nokta/adres kısa süreliğine gösterip
+    // hemen ardından üzerine yazılmasına (görünür "flaş"a) yol açıyordu.
+    if (!startIsAuto.current || !approxPos || !locationReady) return;
+    const withinRegion = regionCenterPt ? haversineM(approxPos, regionCenterPt) / 1000 <= NEARBY_REF_MAX_KM : true;
+    const point = withinRegion ? approxPos : regionCenterPt;
+    if (!point) return;
+    if (lastAutoStartRef.current && haversineM(point, lastAutoStartRef.current) < 40) return;
+    lastAutoStartRef.current = point;
+    setStart(point);
+    resolveLabel(point, setStartQuery, setResolvingStart);
+    // regionCenterPt kasıtlı olarak deps'te değil (bkz. regionCenterLat/Lng yorumu) —
+    // her render'da yeni nesne olduğu için sonsuz tetiklenmeyi önlemek üzere onun
+    // yerine türetilmiş primitive'ler (regionCenterLat/Lng) izleniyor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approxPos, regionCenterLat, regionCenterLng, locationReady, resolveLabel]);
 
   // --- Rota hesapla ---
   useEffect(() => {
@@ -559,10 +579,12 @@ export default function App() {
   const clearAll = () => {
     stopNav();
     startIsAuto.current = true; // sıfırlanınca "Nereden" tekrar canlı konumu takip etsin
-    lastAutoStartRef.current = approxPos;
-    if (approxPos) {
-      setStart(approxPos);
-      resolveLabel(approxPos, setStartQuery, setResolvingStart);
+    const withinRegion = regionCenterPt && approxPos ? haversineM(approxPos, regionCenterPt) / 1000 <= NEARBY_REF_MAX_KM : !!approxPos;
+    const point = withinRegion ? approxPos : regionCenterPt;
+    lastAutoStartRef.current = point;
+    if (point) {
+      setStart(point);
+      resolveLabel(point, setStartQuery, setResolvingStart);
     } else {
       setStart(null);
       setStartQuery("");
