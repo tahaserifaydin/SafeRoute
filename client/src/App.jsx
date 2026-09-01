@@ -219,6 +219,21 @@ export default function App() {
   const nearForStart = userPos || approxPos || regionCenterPt;
   const nearForEnd = start || userPos || approxPos || regionCenterPt;
 
+  // "Yakın yerler" ve "Güvenli nokta" gibi konum-bağımlı katmanlar için referans nokta:
+  // gerçek GPS/başlangıç noktası SADECE görüntülenen bölgeye gerçekten yakınsa kullanılır.
+  // Aksi halde (ör. bölgeyi uzaktan — başka bir şehirden — inceleyen bir kullanıcı) gerçek
+  // konum, o bölgenin idari sınırları içindeki ama haritada hiç görünmeyen çok uzak bir köye
+  // "en yakın" sonuçlar döndürüyordu; harita hep bölge merkezinde açıldığı için o zaman
+  // bölge merkezine göre en yakın yerler daha doğru bir varsayılan.
+  const NEARBY_REF_MAX_KM = 20;
+  const liveRef = userPos || start;
+  const nearbyRef =
+    liveRef && regionCenterPt && haversineM(liveRef, regionCenterPt) / 1000 <= NEARBY_REF_MAX_KM
+      ? liveRef
+      : regionCenterPt;
+  const nearbyRefLat = nearbyRef?.lat;
+  const nearbyRefLng = nearbyRef?.lng;
+
   const showToast = useCallback((msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
@@ -372,25 +387,21 @@ export default function App() {
 
   // --- Güvenli noktalar (saate duyarlı) ---
   useEffect(() => {
-    if (!showHavens) return;
-    const ref = userPos || start || (currentRegion ? { lat: currentRegion.center[0], lng: currentRegion.center[1] } : null);
-    if (!ref) return;
+    if (!showHavens || nearbyRefLat == null) return;
     api
-      .safeHavens({ lat: ref.lat, lng: ref.lng, region, time: effectiveTime })
+      .safeHavens({ lat: nearbyRefLat, lng: nearbyRefLng, region, time: effectiveTime })
       .then((d) => setHavens(d.havens || []))
       .catch(() => setHavens([]));
-  }, [showHavens, userPos, start, region, effectiveTime, currentRegion]);
+  }, [showHavens, nearbyRefLat, nearbyRefLng, region, effectiveTime]);
 
   // --- Yakın yerler: restoran/kafe/market/mağaza vb. (güvenlik amaçlı değil) ---
   useEffect(() => {
-    if (!showNearby) return;
-    const ref = userPos || start || (currentRegion ? { lat: currentRegion.center[0], lng: currentRegion.center[1] } : null);
-    if (!ref) return;
+    if (!showNearby || nearbyRefLat == null) return;
     api
-      .nearbyPlaces({ lat: ref.lat, lng: ref.lng, region })
+      .nearbyPlaces({ lat: nearbyRefLat, lng: nearbyRefLng, region })
       .then((d) => setNearbyPlaces(d.places || []))
       .catch(() => setNearbyPlaces([]));
-  }, [showNearby, userPos, start, region, currentRegion]);
+  }, [showNearby, nearbyRefLat, nearbyRefLng, region]);
 
   // --- Şehir geneli ısı haritası ---
   useEffect(() => {
