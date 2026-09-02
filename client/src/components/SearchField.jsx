@@ -6,6 +6,12 @@ export default function SearchField({ placeholder, value, onChange, onSelect, do
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
+  // searching/searched ayrımı olmadan, sonuç gelmeden önceki an ile GERÇEKTEN
+  // sıfır sonuç bulunan an aynı (boş) görünüyordu — kullanıcıya "hiçbir şey
+  // olmuyor, uygulama bozuk" gibi geliyordu. Artık "Aranıyor…" / "Sonuç
+  // bulunamadı" ile bu iki durum ayrı gösteriliyor.
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
   const skipNext = useRef(false);
 
   useEffect(() => {
@@ -14,15 +20,22 @@ export default function SearchField({ placeholder, value, onChange, onSelect, do
       skipNext.current = false;
       return;
     }
+    setSearched(false);
     if (!value || value.trim().length < 2) {
       setSuggestions([]);
+      setSearching(false);
       return;
     }
+    setSearching(true);
     const handle = setTimeout(() => {
       api
         .geocode(value, region, near)
         .then((d) => setSuggestions(d.results || []))
-        .catch(() => setSuggestions([]));
+        .catch(() => setSuggestions([]))
+        .finally(() => {
+          setSearching(false);
+          setSearched(true);
+        });
     }, 350);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,6 +115,12 @@ export default function SearchField({ placeholder, value, onChange, onSelect, do
             </li>
           ))}
         </ul>
+      )}
+      {open && searching && suggestions.length === 0 && (
+        <div className="suggestions suggestions-status">Aranıyor…</div>
+      )}
+      {open && !searching && searched && suggestions.length === 0 && value.trim().length >= 2 && (
+        <div className="suggestions suggestions-status">Sonuç bulunamadı</div>
       )}
     </div>
   );
