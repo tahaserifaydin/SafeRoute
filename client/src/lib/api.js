@@ -72,9 +72,13 @@ async function geocode(q, region, near) {
   // işletmeler (bkz. fetch-overture-places.js; Mustafakemalpaşa'da OSM'in
   // kendisi restoran/kafe gibi yerlerin neredeyse tamamını hiç bilmiyordu)
   // orada yok. Kendi veri setimizde de ada göre aranır, iki sonuç birleştirilir.
+  // nominatimSearch harici bir servise (nominatim.openstreetmap.org) gidiyor —
+  // yavaş/zaman aşımına uğrarsa ya da erişilemezse (bazı ağlarda oluyor),
+  // Promise.all'un TÜMÜ reddedip kendi veri setimizdeki (nameSearch) geçerli
+  // sonuçları da silmesin diye burada da ayrı bir catch var.
   const [local, raw] = await Promise.all([
     engine.nameSearch({ region, query: q, near }).catch(() => ({ results: [] })),
-    nominatimSearch(q, region),
+    nominatimSearch(q, region).catch(() => []),
   ]);
 
   const nominatimResults = near
