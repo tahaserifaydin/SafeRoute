@@ -38,7 +38,24 @@ export default defineConfig({
         // yeni sürümün açık sekmelerde bile hemen devralmasını sağlıyor.
         skipWaiting: true,
         clientsClaim: true,
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // index.html ÖNBELLEĞE ALINMIYOR (glob'dan html çıkarıldı). Önceden
+        // precache'e alınıyordu — workbox-precaching bunu kendi Cache Storage'ından
+        // sunuyordu, bu da _headers'taki "no-cache" HTTP başlığını tamamen es
+        // geçiyordu (istek hiç ağa gitmiyordu). Sonuç: kullanıcı sayfayı yeniden
+        // yükleyip hatta tarayıcıyı tamamen kapatıp açsa bile, yeni bir service
+        // worker kendini kurup devralana kadar (ki bu adım da güvenilir şekilde
+        // her zaman tetiklenmeyebiliyordu — özellikle mobilde sekme arka plana
+        // atılınca) index.html hep AYNI eski sürümü göstermeye devam ediyordu.
+        // Artık index.html HER ZAMAN doğrudan ağdan (ve no-cache başlığıyla)
+        // geliyor — güncelleme artık service worker'ın kendi güncelleme
+        // döngüsünün çalışmasına bağlı değil.
+        globPatterns: ['**/*.{js,css,svg,png,ico}'],
+        // vite-plugin-pwa/workbox varsayılan olarak html precache'den çıkarılsa
+        // BİLE otomatik bir NavigationRoute (createHandlerBoundToURL("index.html"))
+        // ekliyor — precache'de artık olmayan bir URL'e bağlanan bu rota asıl
+        // amacımızı (index.html'i her zaman ağdan taze çekmek) bozuyordu.
+        // navigateFallback: null bunu tamamen kapatır.
+        navigateFallback: null,
         runtimeCaching: [
           {
             urlPattern: /\/data\/.*\.json$/,
