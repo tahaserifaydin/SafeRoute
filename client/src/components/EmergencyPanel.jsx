@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { useLanguage } from "../lib/i18n";
 
 const PING_INTERVAL_MS = 8000;
 
 export default function EmergencyPanel({ onClose }) {
+  const { t } = useLanguage();
   const [sessionId, setSessionId] = useState(null);
   const [shareUrl, setShareUrl] = useState(null);
   const [error, setError] = useState(null);
@@ -31,7 +33,7 @@ export default function EmergencyPanel({ onClose }) {
 
   const start = async () => {
     if (!navigator.geolocation) {
-      setError("Bu cihazda konum servisi yok.");
+      setError(t("error.noGeoDevice"));
       return;
     }
     setError(null);
@@ -58,20 +60,20 @@ export default function EmergencyPanel({ onClose }) {
             );
           }, PING_INTERVAL_MS);
         } catch (err) {
-          setError("Oturum başlatılamadı: " + err.message);
+          setError(t("error.sessionStartFailed", { msg: err.message }));
         }
       },
-      (err) => setError("Konum alınamadı: " + err.message),
+      (err) => setError(t("error.locationFailed", { msg: err.message })),
       { enableHighAccuracy: true }
     );
   };
 
   const doShare = async () => {
     if (!shareUrl) return;
-    const text = "Canlı konumumu görüntüle (SafeRoute):";
+    const text = t("emergency.shareText");
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Canlı konum", text, url: shareUrl });
+        await navigator.share({ title: t("emergency.shareTitle"), text, url: shareUrl });
         return;
       } catch {
         /* kullanıcı paylaşımı iptal etti, kopyalamaya düş */
@@ -89,32 +91,32 @@ export default function EmergencyPanel({ onClose }) {
   return (
     <section className="emergency-panel" aria-label="Acil durum">
       <div className="emergency-head">
-        <span>🆘 Acil Durum</span>
-        <button onClick={onClose} aria-label="Kapat">
+        <span>{t("toolbar.emergency")}</span>
+        <button onClick={onClose} aria-label={t("action.close")}>
           ×
         </button>
       </div>
 
       <a className="emergency-call" href="tel:112">
-        📞 112&apos;yi Ara
+        {t("emergency.call112")}
       </a>
 
       {!sessionId ? (
         <button className="emergency-share-start" onClick={start}>
-          📍 Canlı Konumumu Paylaş
+          {t("emergency.shareLocation")}
         </button>
       ) : (
         <div className="emergency-live">
           <div className="emergency-live-status">
-            <span className="live-dot" aria-hidden="true" /> Canlı konum paylaşımı aktif
+            <span className="live-dot" aria-hidden="true" /> {t("emergency.liveActive")}
           </div>
           <div className="emergency-link">{shareUrl}</div>
           <div className="emergency-actions">
             <button className="btn-primary" onClick={doShare}>
-              {copied ? "Kopyalandı ✓" : "Paylaş / Kopyala"}
+              {copied ? t("action.copied") : t("action.shareOrCopy")}
             </button>
             <button className="btn-ghost" onClick={stop}>
-              Durdur
+              {t("action.stop")}
             </button>
           </div>
         </div>
@@ -122,10 +124,7 @@ export default function EmergencyPanel({ onClose }) {
 
       {error && <div className="status error">{error}</div>}
 
-      <p className="emergency-disclaimer">
-        Paylaştığın bağlantıyı açan herkes konumunu 6 saat boyunca (ya da sen durdurana kadar) canlı
-        görebilir. Sadece güvendiğin kişilerle paylaş.
-      </p>
+      <p className="emergency-disclaimer">{t("emergency.disclaimer")}</p>
     </section>
   );
 }

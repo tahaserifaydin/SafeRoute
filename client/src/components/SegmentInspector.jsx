@@ -1,18 +1,21 @@
-import { BREAKDOWN_LABELS, SCORE_BANDS, scoreColor, scoreName } from "../lib/constants";
+import { breakdownLabels, SCORE_BANDS, scoreColor, scoreName } from "../lib/constants";
+import { useLanguage } from "../lib/i18n";
 
 // Bir yol parçasının skorunun neden o olduğunu bileşen bileşen gösterir.
 export default function SegmentInspector({ segment, onClose }) {
+  const { lang, t } = useLanguage();
   if (!segment) return null;
   const b = segment.breakdown;
+  const BREAKDOWN_LABELS = breakdownLabels(lang);
 
   return (
     <section className="inspect-box" aria-label="Segment detayı">
       <header className="inspect-head">
         <span>
-          {segment.name || "İsimsiz yol"}
+          {segment.name || t("road.unnamed")}
           {segment.buurt ? <span className="inspect-sub"> · {segment.buurt}</span> : null}
         </span>
-        <button onClick={onClose} aria-label="Kapat">
+        <button onClick={onClose} aria-label={t("action.close")}>
           ×
         </button>
       </header>
@@ -21,15 +24,17 @@ export default function SegmentInspector({ segment, onClose }) {
         <span className="inspect-score" style={{ color: scoreColor(segment.score) }}>
           {segment.score}
         </span>
-        <span className="inspect-score-label">/100 · {scoreName(segment.score)}</span>
+        <span className="inspect-score-label">/100 · {scoreName(segment.score, lang)}</span>
       </div>
 
       {segment.reportEffect ? (
         <div className="inspect-report-note">
-          Kullanıcı raporları nedeniyle {segment.baseScore} → {segment.score}
-          {" ("}
-          {segment.reportEffect > 0 ? "-" : "+"}
-          {Math.abs(segment.reportEffect)} puan{")"}
+          {t("report.effectNote", {
+            base: segment.baseScore,
+            score: segment.score,
+            sign: segment.reportEffect > 0 ? "-" : "+",
+            delta: Math.abs(segment.reportEffect),
+          })}
         </div>
       ) : null}
 
@@ -49,15 +54,16 @@ export default function SegmentInspector({ segment, onClose }) {
           );
         })}
 
-      {b && <div className="inspect-note">Kırmızı satırlar puan düşürür, diğerleri katkı sağlar.</div>}
+      {b && <div className="inspect-note">{t("breakdown.legendNote")}</div>}
     </section>
   );
 }
 
 export function ScoreLegend() {
+  const { t } = useLanguage();
   return (
     <div className="legend">
-      <span className="legend-title">Rota rengi = güvenlik skoru</span>
+      <span className="legend-title">{t("legend.title")}</span>
       <div className="legend-scale">
         {SCORE_BANDS.map((b) => (
           <span key={b.label} className="legend-item">
@@ -66,7 +72,7 @@ export function ScoreLegend() {
           </span>
         ))}
       </div>
-      <span className="legend-hint">Haritada bir parçaya dokun → neden bu puan?</span>
+      <span className="legend-hint">{t("legend.hint")}</span>
     </div>
   );
 }

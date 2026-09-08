@@ -5,11 +5,12 @@ import "leaflet/dist/leaflet.css";
 import {
   DEFAULT_CENTER,
   REPORT_TYPE_ICONS,
-  REPORT_TYPE_LABELS,
   formatDistance,
+  reportTypeLabels,
   scoreColor,
   toLatLngs,
 } from "../lib/constants";
+import { useLanguage } from "../lib/i18n";
 
 const makeIcon = (html, size = 18) =>
   L.divIcon({ className: "", html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
@@ -131,10 +132,16 @@ export default function RouteMap({
   onConfirmReport,
   heatmapBands,
 }) {
+  const { lang, t } = useLanguage();
+  const REPORT_TYPE_LABELS = reportTypeLabels(lang);
   return (
     <MapContainer center={DEFAULT_CENTER} zoom={14} className="map" zoomControl={true}>
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, işletme verisi kısmen &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a> ve <a href="https://opensource.foursquare.com/os-places/">Foursquare OS Places</a>'
+        attribution={
+          lang === "en"
+            ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, business data partly &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a> and <a href="https://opensource.foursquare.com/os-places/">Foursquare OS Places</a>'
+            : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, işletme verisi kısmen &copy; <a href="https://overturemaps.org">Overture Maps Foundation</a> ve <a href="https://opensource.foursquare.com/os-places/">Foursquare OS Places</a>'
+        }
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ClickHandler onPick={onMapClick} />
@@ -199,7 +206,7 @@ export default function RouteMap({
               {h.typeLabel} · {formatDistance(h.distanceM)}
               <br />
               <span style={{ color: h.isOpen ? "#16a34a" : "#dc2626" }}>
-                {h.alwaysOpen ? "7/24 açık" : h.isOpen ? "Şu an açık" : "Şu an kapalı"}
+                {h.alwaysOpen ? t("havens.open247") : h.isOpen ? t("havens.openNow") : t("havens.closedNow")}
               </span>
             </Popup>
           </Marker>
@@ -228,12 +235,13 @@ export default function RouteMap({
             ) : null}
             <br />
             <span style={{ color: "#666" }}>
-              {new Date(r.createdAt).toLocaleDateString("tr-TR")} · güven %{r.trust ?? 100}
-              {r.confirmations ? ` · ${r.confirmations} teyit` : ""}
+              {new Date(r.createdAt).toLocaleDateString(lang === "en" ? "en-GB" : "tr-TR")} ·{" "}
+              {t("report.trustPercent", { trust: r.trust ?? 100 })}
+              {r.confirmations ? ` · ${t("report.confirmationsCount", { n: r.confirmations })}` : ""}
             </span>
             <br />
             <button className="popup-btn" onClick={() => onConfirmReport(r.id)}>
-              Ben de gördüm
+              {t("report.confirmToo")}
             </button>
           </Popup>
         </Marker>

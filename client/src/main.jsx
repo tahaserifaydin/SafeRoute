@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.jsx'
 import TrackViewer from './TrackViewer.jsx'
 import StudyView from './StudyView.jsx'
+import { LanguageProvider } from './lib/i18n.jsx'
 
 // Önceden vite-plugin-pwa'nın otomatik eklediği script'e güveniliyordu — ne
 // zaman/nasıl güncellediği belirsizdi, kullanıcılar günler sonra bile eski
@@ -38,6 +39,8 @@ function Root() {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Root />
+    <LanguageProvider>
+      <Root />
+    </LanguageProvider>
   </StrictMode>,
 )

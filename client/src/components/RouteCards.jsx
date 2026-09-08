@@ -1,4 +1,5 @@
 import { scoreColor, scoreName } from "../lib/constants";
+import { useLanguage } from "../lib/i18n";
 
 // Rota boyunca bir kırılım alanının (aydınlatma, yaya altyapısı...) uzunluk
 // ağırlıklı ortalaması — tek bir segmentin skoru değil, tüm rotanın genel
@@ -12,7 +13,7 @@ function avgBreakdownStat(route, key) {
   return Math.round(scored.reduce((sum, s) => sum + s.breakdown[key] * s.lengthKm, 0) / totalLen);
 }
 
-function Card({ id, title, dotClass, route, selected, onSelect }) {
+function Card({ id, title, dotClass, route, selected, onSelect, t }) {
   const lighting = avgBreakdownStat(route, "lighting");
   const pedInfra = avgBreakdownStat(route, "pedInfra");
   return (
@@ -25,21 +26,21 @@ function Card({ id, title, dotClass, route, selected, onSelect }) {
         <span className="route-card-title">
           <span className={`dot ${dotClass}`} aria-hidden="true" /> {title}
         </span>
-        <span className="route-card-time">{route.durationMin} dk</span>
+        <span className="route-card-time">{t("route.minutes", { n: route.durationMin })}</span>
       </div>
       <div className="route-card-meta">{route.distanceKm} km</div>
       <div className="route-card-scores">
         <span className="score-chip" style={{ borderColor: scoreColor(route.avgSafetyScore) }}>
-          <b style={{ color: scoreColor(route.avgSafetyScore) }}>{route.avgSafetyScore ?? "-"}</b> ortalama
+          <b style={{ color: scoreColor(route.avgSafetyScore) }}>{route.avgSafetyScore ?? "-"}</b> {t("route.average")}
         </span>
         <span className="score-chip" style={{ borderColor: scoreColor(route.minSafetyScore) }}>
-          <b style={{ color: scoreColor(route.minSafetyScore) }}>{route.minSafetyScore ?? "-"}</b> en düşük
+          <b style={{ color: scoreColor(route.minSafetyScore) }}>{route.minSafetyScore ?? "-"}</b> {t("route.lowest")}
         </span>
       </div>
       {(lighting != null || pedInfra != null) && (
         <div className="route-card-breakdown">
-          {lighting != null && <span>💡 %{lighting} aydınlık</span>}
-          {pedInfra != null && <span>🚶 %{pedInfra} kaldırım</span>}
+          {lighting != null && <span>{t("route.lightPercent", { n: lighting })}</span>}
+          {pedInfra != null && <span>{t("route.sidewalkPercent", { n: pedInfra })}</span>}
         </div>
       )}
     </button>
@@ -47,6 +48,7 @@ function Card({ id, title, dotClass, route, selected, onSelect }) {
 }
 
 export default function RouteCards({ result, selectedRoute, onSelect }) {
+  const { lang, t } = useLanguage();
   const { fast, safe } = result;
   const detourPct = fast.distanceKm
     ? Math.round(((safe.distanceKm - fast.distanceKm) / fast.distanceKm) * 100)
@@ -59,37 +61,40 @@ export default function RouteCards({ result, selectedRoute, onSelect }) {
       <div className="results">
         <Card
           id="fast"
-          title="En Hızlı"
+          title={t("route.fastest")}
           dotClass="dot-fast"
           route={fast}
           selected={selectedRoute === "fast"}
           onSelect={onSelect}
+          t={t}
         />
         <Card
           id="safe"
-          title="En Güvenli"
+          title={t("route.safest")}
           dotClass="dot-safe"
           route={safe}
           selected={selectedRoute === "safe"}
           onSelect={onSelect}
+          t={t}
         />
       </div>
 
       {gain > 0 || minGain > 0 ? (
         <div className="diff-note">
-          {detourPct > 0 ? `%${detourPct} daha uzun` : "Aynı mesafede"}, ama güvenlik skoru{" "}
-          <b>{gain > 0 ? `+${gain}` : gain}</b> puan
-          {minGain > 0 ? ` ve en zayıf noktası +${minGain} puan` : ""} daha yüksek.
+          {t("route.saferBy", {
+            detour: detourPct > 0 ? t("route.longerByPercent", { n: detourPct }) : t("route.sameDistance"),
+            gain: gain > 0 ? `+${gain}` : gain,
+            weakest: minGain > 0 ? t("route.weakestAlsoHigher", { n: minGain }) : "",
+          })}
         </div>
       ) : (
-        <div className="diff-note neutral">
-          Bu iki nokta arasında daha güvenli bir alternatif bulunamadı — tek makul yol bu.
-        </div>
+        <div className="diff-note neutral">{t("route.noAlternative")}</div>
       )}
 
       <div className="verdict">
-        Seçili rota: <b style={{ color: scoreColor(result[selectedRoute].avgSafetyScore) }}>
-          {scoreName(result[selectedRoute].avgSafetyScore)}
+        {t("route.selectedLabel")}
+        <b style={{ color: scoreColor(result[selectedRoute].avgSafetyScore) }}>
+          {scoreName(result[selectedRoute].avgSafetyScore, lang)}
         </b>
       </div>
     </>

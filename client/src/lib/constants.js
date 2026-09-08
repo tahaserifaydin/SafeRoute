@@ -1,15 +1,24 @@
+import {
+  BREAKDOWN_LABELS_I18N,
+  REPORT_TYPE_LABELS_I18N,
+  SAFETY_PREF_LABELS_I18N,
+  SCORE_BAND_NAMES_I18N,
+  SCORE_UNKNOWN_I18N,
+  TIME_LABELS_I18N,
+} from "./i18n";
+
 export const DEFAULT_CENTER = [51.4416, 5.4697];
 export const ARRIVAL_RADIUS_M = 15;
 export const SIM_SPEED_KMH = 30; // demo amaçlı hızlandırılmış yürüyüş
 export const SIM_TICK_MS = 400;
 
-export const TIME_LABELS = {
-  morning: "Sabah",
-  midday: "Öğle",
-  evening: "Akşam",
-  night: "Gece",
-  lateNight: "Gece yarısı",
-};
+// Aşağıdaki etiket sözlükleri iki dilli (bkz. lib/i18n.js): TIME_LABELS_I18N
+// vb. ham {tr, en} çiftlerini tutar, buradaki fonksiyonlar (timeLabels(lang)
+// gibi) çağrı anındaki dile göre düz bir obje/dizi döner — bileşenler bunu
+// hâlâ eskisi gibi Object.entries()/indeksleme ile kullanabilir.
+export function timeLabels(lang) {
+  return Object.fromEntries(Object.entries(TIME_LABELS_I18N).map(([k, v]) => [k, v[lang] || v.tr]));
+}
 
 export const TIME_RANGES = {
   morning: "08–13",
@@ -19,13 +28,9 @@ export const TIME_RANGES = {
   lateNight: "00–08",
 };
 
-export const REPORT_TYPE_LABELS = {
-  dark: "Karanlık / lamba yok",
-  unsafe: "Tekinsiz hissettim",
-  harassment: "Taciz / rahatsız edilme",
-  blocked: "Yol kapalı / geçilmiyor",
-  safe: "Burası güvenli",
-};
+export function reportTypeLabels(lang) {
+  return Object.fromEntries(Object.entries(REPORT_TYPE_LABELS_I18N).map(([k, v]) => [k, v[lang] || v.tr]));
+}
 
 export const REPORT_TYPE_ICONS = {
   dark: "🌑",
@@ -35,24 +40,29 @@ export const REPORT_TYPE_ICONS = {
   safe: "✅",
 };
 
-export const BREAKDOWN_LABELS = {
-  lighting: "Aydınlatma",
-  pedInfra: "Yaya altyapısı",
-  frontage: "Açık işletme (gözetim)",
-  roadType: "Yol karakteri",
-  nightlifeRisk: "Bar/gece hayatı yoğunluğu",
-  crimeRisk: "Kayıtlı suç riski (mahalle)",
-};
+export function breakdownLabels(lang) {
+  return Object.fromEntries(Object.entries(BREAKDOWN_LABELS_I18N).map(([k, v]) => [k, v[lang] || v.tr]));
+}
 
-export const SAFETY_PREF_LABELS = ["Çok düşük", "Düşük", "Orta", "Yüksek", "Çok yüksek"];
+export function safetyPrefLabels(lang) {
+  return SAFETY_PREF_LABELS_I18N.map((v) => v[lang] || v.tr);
+}
 
-export const SCORE_BANDS = [
-  { max: 35, color: "#dc2626", label: "0–34", name: "Çok tehlikeli" },
-  { max: 50, color: "#f97316", label: "35–49", name: "Tehlikeli" },
-  { max: 65, color: "#facc15", label: "50–64", name: "Hafif tehlikeli" },
-  { max: 80, color: "#84cc16", label: "65–79", name: "İyi" },
-  { max: 101, color: "#16a34a", label: "80+", name: "Güvenli" },
+// Renk/eşik değerleri dilden bağımsız; sadece isim (name) dil bazında çözülüyor.
+const SCORE_BAND_THRESHOLDS = [
+  { max: 35, color: "#dc2626", label: "0–34" },
+  { max: 50, color: "#f97316", label: "35–49" },
+  { max: 65, color: "#facc15", label: "50–64" },
+  { max: 80, color: "#84cc16", label: "65–79" },
+  { max: 101, color: "#16a34a", label: "80+" },
 ];
+
+export function scoreBands(lang) {
+  return SCORE_BAND_THRESHOLDS.map((b, i) => ({ ...b, name: SCORE_BAND_NAMES_I18N[i][lang] || SCORE_BAND_NAMES_I18N[i].tr }));
+}
+// Sadece renk/eşik gerekip dile ihtiyaç duyulmayan yerler (ör. rota çizgisi
+// renklendirme) için dilden bağımsız sabit liste.
+export const SCORE_BANDS = SCORE_BAND_THRESHOLDS;
 
 // Cihaz saatinden zaman profili tahmini (sunucudakiyle aynı sınırlar)
 export function localTimeProfile() {
@@ -69,9 +79,10 @@ export function scoreColor(score) {
   return (SCORE_BANDS.find((b) => score < b.max) || SCORE_BANDS[SCORE_BANDS.length - 1]).color;
 }
 
-export function scoreName(score) {
-  if (score == null) return "Bilinmiyor";
-  return (SCORE_BANDS.find((b) => score < b.max) || SCORE_BANDS[SCORE_BANDS.length - 1]).name;
+export function scoreName(score, lang = "tr") {
+  if (score == null) return SCORE_UNKNOWN_I18N[lang] || SCORE_UNKNOWN_I18N.tr;
+  const bands = scoreBands(lang);
+  return (bands.find((b) => score < b.max) || bands[bands.length - 1]).name;
 }
 
 export function formatDistance(m) {

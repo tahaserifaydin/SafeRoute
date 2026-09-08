@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { formatDistance } from "../lib/constants";
+import { useLanguage } from "../lib/i18n";
 
 export default function SearchField({ placeholder, value, onChange, onSelect, dotClass, region, busy, near }) {
+  const { t } = useLanguage();
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
@@ -86,7 +88,7 @@ export default function SearchField({ placeholder, value, onChange, onSelect, do
       {value && !busy && (
         <button
           className="field-clear"
-          aria-label="Temizle"
+          aria-label={t("action.clear")}
           onMouseDown={(e) => {
             e.preventDefault();
             onChange("");
@@ -117,10 +119,10 @@ export default function SearchField({ placeholder, value, onChange, onSelect, do
         </ul>
       )}
       {open && searching && suggestions.length === 0 && (
-        <div className="suggestions suggestions-status">Aranıyor…</div>
+        <div className="suggestions suggestions-status">{t("search.searching")}</div>
       )}
       {open && !searching && searched && suggestions.length === 0 && value.trim().length >= 2 && (
-        <div className="suggestions suggestions-status">Sonuç bulunamadı</div>
+        <div className="suggestions suggestions-status">{t("search.noResults")}</div>
       )}
     </div>
   );

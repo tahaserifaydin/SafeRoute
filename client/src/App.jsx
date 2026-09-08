@@ -17,21 +17,26 @@ import {
 } from "./lib/api";
 import {
   ARRIVAL_RADIUS_M,
-  SAFETY_PREF_LABELS,
   SIM_SPEED_KMH,
   SIM_TICK_MS,
-  TIME_LABELS,
   TIME_RANGES,
   haversineM,
   interpolateAlongRoute,
   localTimeProfile,
+  safetyPrefLabels,
+  timeLabels,
 } from "./lib/constants";
+import { useLanguage } from "./lib/i18n";
 import "./App.css";
 
 const urlState = decodeStateFromUrl();
 const hadExplicitRegion = !!urlState.region; // paylaşılan bir bağlantıdan geldiyse bölgeyi ezme
 
 export default function App() {
+  const { lang, toggleLang, t } = useLanguage();
+  const TIME_LABELS = timeLabels(lang);
+  const SAFETY_PREF_LABELS = safetyPrefLabels(lang);
+
   // --- Bölge / zaman ---
   const [regions, setRegions] = useState([]);
   const [region, setRegion] = useState(urlState.region || "eindhoven");
@@ -291,7 +296,10 @@ export default function App() {
         setRegions(d.regions || []);
         setAutoTimeProfile(d.currentTimeProfile || localTimeProfile());
       })
-      .catch(() => setError("Sunucuya bağlanılamadı. Arka uç çalışıyor mu?"));
+      .catch(() => setError(t("error.serverUnreachable")));
+    // Sadece ilk yüklemede çalışsın — dil değişince bölge listesini yeniden
+    // çekmeye gerek yok.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sayfa her zaman Eindhoven ile açılmasın diye: paylaşılan bir bağlantıdan
@@ -326,7 +334,7 @@ export default function App() {
   // --- Nokta seçilince adresini çöz (koordinat yerine sokak adı göster) ---
   const resolveLabel = useCallback(async (point, setQuery, setBusy) => {
     setBusy(true);
-    setQuery("Adres çözümleniyor…");
+    setQuery(t("address.resolving"));
     try {
       const { label } = await api.reverse(point.lat, point.lng);
       setQuery(label);
@@ -335,7 +343,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [t]);
 
   // URL'den gelen noktaların adreslerini bir kez çöz
   useEffect(() => {
@@ -377,10 +385,10 @@ export default function App() {
     const myId = ++requestId.current;
     setLoading(true);
     setError(null);
-    setLoadingMsg("Rota hesaplanıyor…");
+    setLoadingMsg(t("route.calculating"));
     // İlk istekte sunucu grafiği kuruyor olabilir; kullanıcıyı bilgilendir
     const slowTimer = setTimeout(() => {
-      if (myId === requestId.current) setLoadingMsg("Bu zaman dilimi ilk kez kullanılıyor, yol ağı hazırlanıyor…");
+      if (myId === requestId.current) setLoadingMsg(t("route.firstTimePrep"));
     }, 1200);
 
     api
@@ -403,7 +411,7 @@ export default function App() {
       });
 
     return () => clearTimeout(slowTimer);
-  }, [start, end, region, effectiveTime, safetyPref, accessibleMode, isWet]);
+  }, [start, end, region, effectiveTime, safetyPref, accessibleMode, isWet, t]);
 
   // --- Güvenli noktalar (saate duyarlı) ---
   useEffect(() => {
@@ -491,7 +499,7 @@ export default function App() {
   const startNav = () => {
     if (!active) return;
     if (!navigator.geolocation) {
-      setError("Bu tarayıcıda konum servisi kullanılamıyor.");
+      setError(t("error.noGeoBrowser"));
       return;
     }
     setError(null);
@@ -501,7 +509,7 @@ export default function App() {
     if (isMobile) setSheetOpen(false);
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => setUserPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => setError("Konum alınamadı: " + err.message),
+      (err) => setError(t("error.locationFailed", { msg: err.message })),
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
     );
   };
@@ -609,10 +617,10 @@ export default function App() {
       setReports(d.reports || []);
       setPendingReport(null);
       setReportMode(false);
-      showToast("Rapor kaydedildi, teşekkürler.");
+      showToast(t("toast.reportSaved"));
       if (start && end) setSafetyPref((p) => p + 1e-9); // rota yeniden hesaplansın diye (gözle fark edilmez) tetikleyici
     } catch (err) {
-      setError("Rapor gönderilemedi: " + err.message);
+      setError(t("error.reportFailed", { msg: err.message }));
     }
   };
 
@@ -621,14 +629,14 @@ export default function App() {
       await api.confirmReport(id);
       const d = await api.reports(region);
       setReports(d.reports || []);
-      showToast("Teyidin kaydedildi.");
+      showToast(t("toast.confirmSaved"));
       // submitReport'taki gibi: teyit güven skorunu (dolayısıyla rapor
       // ağırlığını) artırıyor ama bu, ekrandaki mevcut rota otomatik
       // yeniden hesaplanmadan görünmüyordu — kullanıcı teyit ettiğinde
       // rotanın rengi/skoru hiç değişmiyormuş gibi görünüyordu.
       if (start && end) setSafetyPref((p) => p + 1e-9);
     } catch (err) {
-      setError("Teyit gönderilemedi: " + err.message);
+      setError(t("error.confirmFailed", { msg: err.message }));
     }
   };
 
@@ -636,16 +644,16 @@ export default function App() {
     const url = encodeStateToUrl({ start, end, region, timeMode, safetyPref });
     try {
       await navigator.clipboard.writeText(url);
-      showToast("Bağlantı kopyalandı.");
+      showToast(t("toast.linkCopied"));
     } catch {
       window.history.replaceState({}, "", url);
-      showToast("Bağlantı adres çubuğunda.");
+      showToast(t("toast.linkInAddressBar"));
     }
   };
 
   const doSaveRoute = () => {
     if (!start || !end) return;
-    const name = window.prompt("Bu rotaya bir ad ver:", `${startQuery.split(",")[0]} → ${endQuery.split(",")[0]}`);
+    const name = window.prompt(t("route.namePrompt"), `${startQuery.split(",")[0]} → ${endQuery.split(",")[0]}`);
     if (!name) return;
     const entry = {
       id: `${start.lat},${start.lng}-${end.lat},${end.lng}`,
@@ -657,7 +665,7 @@ export default function App() {
       endLabel: endQuery.split(",")[0],
     };
     setSavedRoutes(saveRoute(entry));
-    showToast("Rota kaydedildi.");
+    showToast(t("toast.routeSaved"));
   };
 
   const loadRoute = (r) => {
@@ -708,7 +716,7 @@ export default function App() {
             animation: "saferoute-spin 0.8s linear infinite",
           }}
         />
-        <div>Konumun belirleniyor…</div>
+        <div>{t("app.locating")}</div>
         <style>{"@keyframes saferoute-spin { to { transform: rotate(360deg); } }"}</style>
       </div>
     );
@@ -721,7 +729,7 @@ export default function App() {
           <button
             className="sheet-handle"
             onClick={() => setSheetOpen((v) => !v)}
-            aria-label={sheetOpen ? "Paneli küçült" : "Paneli aç"}
+            aria-label={sheetOpen ? t("panel.collapse") : t("panel.expand")}
           >
             <span />
           </button>
@@ -729,8 +737,13 @@ export default function App() {
 
         <div className="panel-scroll">
           <header className="brand">
-            <h1>SafeRoute</h1>
-            <p>Güvenli yaya navigasyonu</p>
+            <div className="brand-row">
+              <h1>SafeRoute</h1>
+              <button className="lang-toggle" onClick={toggleLang} aria-label="Language / Dil">
+                {t("language.toggle")}
+              </button>
+            </div>
+            <p>{t("app.subtitle")}</p>
           </header>
 
           {navActive ? (
@@ -747,7 +760,7 @@ export default function App() {
             />
           ) : (
             <>
-              <div className="segmented" role="group" aria-label="Bölge">
+              <div className="segmented" role="group" aria-label={t("region.groupLabel")}>
                 {regionList.map((r) => (
                   <button
                     key={r.id}
@@ -760,12 +773,12 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="time-switch" role="group" aria-label="Zaman dilimi">
+              <div className="time-switch" role="group" aria-label={t("time.groupLabel")}>
                 <button
                   className={`time-btn ${timeMode === "auto" ? "active" : ""}`}
                   onClick={() => setTimeMode("auto")}
                 >
-                  Şimdi · {TIME_LABELS[autoTimeProfile]}
+                  {t("time.now", { label: TIME_LABELS[autoTimeProfile] })}
                 </button>
                 {Object.entries(TIME_LABELS).map(([key, label]) => (
                   <button
@@ -780,7 +793,7 @@ export default function App() {
               </div>
 
               <SearchField
-                placeholder="Nereden"
+                placeholder={t("search.from")}
                 value={startQuery}
                 onChange={setStartQuery}
                 dotClass="dot-start"
@@ -799,7 +812,7 @@ export default function App() {
                 }}
               />
               <SearchField
-                placeholder="Nereye"
+                placeholder={t("search.to")}
                 value={endQuery}
                 onChange={setEndQuery}
                 dotClass="dot-end"
@@ -819,7 +832,8 @@ export default function App() {
 
               <div className="slider-row">
                 <label htmlFor="safety-pref">
-                  Güvenlik önceliği: <b>{SAFETY_PREF_LABELS[Math.round(safetyPref * 4)]}</b>
+                  {t("safety.prefLabel", { label: "" })}
+                  <b>{SAFETY_PREF_LABELS[Math.round(safetyPref * 4)]}</b>
                 </label>
                 <input
                   id="safety-pref"
@@ -832,7 +846,7 @@ export default function App() {
                   // Panelde kaydırırken tekerleğin değeri değiştirmesini engelle
                   onWheel={(e) => e.currentTarget.blur()}
                 />
-                <div className="slider-hint">Yüksek = daha uzun ama daha güvenli rotaya razıyım</div>
+                <div className="slider-hint">{t("safety.hint")}</div>
               </div>
 
               <button
@@ -842,23 +856,23 @@ export default function App() {
               >
                 <span aria-hidden="true">♿</span>
                 <span>
-                  <b>Erişilebilir Mod</b>
-                  <small>Merdivenden kaçın, düz/kaplamalı yolları tercih et</small>
+                  <b>{t("a11y.title")}</b>
+                  <small>{t("a11y.desc")}</small>
                 </span>
                 <span className="a11y-switch" aria-hidden="true" />
               </button>
 
               {result?.[selectedRoute]?.hasSteps && accessibleMode && (
-                <div className="status error">
-                  ⚠️ Bu rota kaçınılamayan kısa bir merdiven içeriyor.
-                </div>
+                <div className="status error">{t("a11y.stepsWarning")}</div>
               )}
 
               {isWet && (
                 <div className="status">
-                  {wetKind === "snow" ? "❄️" : "🌧️"} {wetKind === "snow" ? "Kar" : "Yağmur"} yağıyor
-                  {temperature != null ? ` (${Math.round(temperature)}°C)` : ""} — merdiven ve
-                  toprak/kaplamasız yollar rota hesabında cezalandırılıyor.
+                  {wetKind === "snow" ? "❄️" : "🌧️"}{" "}
+                  {t("weather.penaltyNote", {
+                    kind: wetKind === "snow" ? t("weather.snow") : t("weather.rain"),
+                    temp: temperature != null ? ` (${Math.round(temperature)}°C)` : "",
+                  })}
                 </div>
               )}
 
@@ -867,19 +881,19 @@ export default function App() {
                   className={`tool-btn ${showHavens ? "active" : ""}`}
                   onClick={() => setShowHavens((v) => !v)}
                 >
-                  🛟 Güvenli nokta
+                  {t("toolbar.havens")}
                 </button>
                 <button
                   className={`tool-btn ${showNearby ? "active" : ""}`}
                   onClick={() => setShowNearby((v) => !v)}
                 >
-                  🍽️ Yakın yerler
+                  {t("toolbar.nearby")}
                 </button>
                 <button
                   className={`tool-btn ${showHeatmap ? "active" : ""}`}
                   onClick={() => setShowHeatmap((v) => !v)}
                 >
-                  {heatmapLoading ? <span className="field-spinner" aria-hidden="true" /> : "🗺️"} Isı haritası
+                  {heatmapLoading ? <span className="field-spinner" aria-hidden="true" /> : "🗺️"} {t("toolbar.heatmapText")}
                 </button>
                 <button
                   className={`tool-btn ${reportMode ? "active" : ""}`}
@@ -888,21 +902,21 @@ export default function App() {
                     setPendingReport(null);
                   }}
                 >
-                  ⚠️ Bildir
+                  {t("toolbar.report")}
                 </button>
                 <button className="tool-btn emergency" onClick={() => setEmergencyOpen(true)}>
-                  🆘 Acil Durum
+                  {t("toolbar.emergency")}
                 </button>
                 <a className="tool-btn" href="?study=1" target="_blank" rel="noreferrer">
-                  🔬 Çalışmaya katıl
+                  {t("toolbar.study")}
                 </a>
                 {result && (
                   <>
                     <button className="tool-btn" onClick={shareLink}>
-                      🔗 Paylaş
+                      {t("toolbar.share")}
                     </button>
                     <button className="tool-btn" onClick={doSaveRoute}>
-                      ☆ Kaydet
+                      {t("toolbar.save")}
                     </button>
                   </>
                 )}
@@ -911,7 +925,7 @@ export default function App() {
               {emergencyOpen && <EmergencyPanel onClose={() => setEmergencyOpen(false)} />}
 
               {reportMode && !pendingReport && (
-                <div className="status">Bildirmek istediğin noktaya haritada dokun.</div>
+                <div className="status">{t("report.tapHint")}</div>
               )}
               {pendingReport && (
                 <ReportForm
@@ -931,10 +945,10 @@ export default function App() {
               {error && <div className="status error">{error}</div>}
 
               {!start && !reportMode && !loading && (
-                <div className="hint">Adres yaz ya da haritaya dokunarak başlangıç noktası seç.</div>
+                <div className="hint">{t("hint.pickStart")}</div>
               )}
               {start && !end && !reportMode && !loading && (
-                <div className="hint">Şimdi de varış noktasını seç.</div>
+                <div className="hint">{t("hint.pickEnd")}</div>
               )}
 
               {result && (
@@ -942,10 +956,10 @@ export default function App() {
                   <RouteCards result={result} selectedRoute={selectedRoute} onSelect={setSelectedRoute} />
                   <div className="nav-buttons">
                     <button className="btn-primary" onClick={startNav}>
-                      Navigasyonu başlat
+                      {t("nav.start")}
                     </button>
                     <button className="btn-secondary" onClick={startSim}>
-                      Simülasyon (demo)
+                      {t("nav.simulate")}
                     </button>
                   </div>
                   <ScoreLegend />
@@ -966,7 +980,7 @@ export default function App() {
 
               {(start || end) && (
                 <button className="btn-ghost wide" onClick={clearAll}>
-                  Temizle
+                  {t("action.clear")}
                 </button>
               )}
             </>
@@ -1005,10 +1019,10 @@ export default function App() {
             {wetKind === "snow" ? "❄️" : wetKind === "rain" ? "🌧️" : "🌡️"} {Math.round(temperature)}°C
           </div>
         )}
-        {reportMode && <div className="map-mode-badge">Bildirme modu — haritaya dokun</div>}
+        {reportMode && <div className="map-mode-badge">{t("report.modeBadge")}</div>}
         {showHeatmap && (
           <div className="heatmap-legend">
-            <span>{TIME_LABELS[effectiveTime]} — şehir geneli güvenlik skoru</span>
+            <span>{t("heatmap.legendTitle", { time: TIME_LABELS[effectiveTime] })}</span>
             <div className="legend-scale">
               {[
                 { c: "#dc2626", t: "0-34" },
