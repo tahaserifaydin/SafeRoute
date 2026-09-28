@@ -8,6 +8,12 @@ const pending = new Map();
 export const REGIONS = {
   eindhoven: { id: "eindhoven", label: "Eindhoven", center: [51.4416, 5.4697] },
   nuenen: { id: "nuenen", label: "Nuenen", center: [51.4743, 5.549] },
+  tilburg: { id: "tilburg", label: "Tilburg", center: [51.5555, 5.0913] },
+  breda: { id: "breda", label: "Breda", center: [51.5719, 4.7683] },
+  denbosch: { id: "denbosch", label: "'s-Hertogenbosch", center: [51.6978, 5.3037] },
+  helmond: { id: "helmond", label: "Helmond", center: [51.4793, 5.6567] },
+  arnhem: { id: "arnhem", label: "Arnhem", center: [51.9851, 5.8987] },
+  nijmegen: { id: "nijmegen", label: "Nijmegen", center: [51.8425, 5.8528] },
   // Deneysel: Türkiye bölgeleri — Hollanda'daki gibi resmi suç verisi yok,
   // skor yalnızca OSM tabanlı sinyallere (aydınlatma/kaldırım/yol tipi/işletme) dayanıyor.
   bornova: { id: "bornova", label: "Bornova (İzmir)", center: [38.4581, 27.2397] },
