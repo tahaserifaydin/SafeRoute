@@ -33,13 +33,21 @@ const CRIME_CLASSES = {
   "2.5.2": { label: "Kamu düzenini bozma", class: "disorder" },
 };
 
-const MONTHS_BACK = 12;
+// Politie OData'da 2012'ye kadar aylık veri var (175 ay). Varsayılan 12 ay,
+// mahalle başına suç sayısını istatistiksel olarak gürültülü yapıyordu (bazı
+// mahallede tek ayda 0-3 olay); son N ayı --months ile büyütmek (ör. 36) aynı
+// mahallenin daha uzun bir pencerede toplanmış, daha az gürültülü bir suç
+// oranı vermesini sağlar — ML kalibrasyon denemesi için (bkz.
+// train_safety_model.py) asıl darboğazın etiket gürültüsü olduğu tespit
+// edildikten sonra eklendi.
+const monthsIdx = process.argv.indexOf("--months");
+const MONTHS_BACK = monthsIdx !== -1 ? parseInt(process.argv[monthsIdx + 1], 10) : 12;
 const PDOK_WFS = "https://service.pdok.nl/cbs/wijkenbuurten/2024/wfs/v1_0";
 const POLITIE_ODATA = "https://dataderden.cbs.nl/ODataApi/odata/47022NED";
 
 const [, , dirName, minLat, minLng, maxLat, maxLng] = process.argv;
 if (!dirName || !minLat) {
-  console.error("Kullanım: node fetch-crime.js <klasör> <minLat> <minLng> <maxLat> <maxLng>");
+  console.error("Kullanım: node fetch-crime.js <klasör> <minLat> <minLng> <maxLat> <maxLng> [--months N]");
   process.exit(1);
 }
 const OUT_DIR = path.join(__dirname, "..", "..", "data", dirName);
@@ -82,10 +90,20 @@ async function fetchBuurtPolygons() {
 
 // Tüm Hollanda'yı tek sorguda çekmek API'yi 500'e düşürüyor; sorguyu ilgili
 // belediyelerin buurt kodu ön ekiyle (BU + gemeentecode) daraltıyoruz.
+// SoortMisdrijf de sunucu tarafında filtreleniyor: tablo 47022NED'de bizim
+// ilgilendiğimiz 9 suç türü dışında ~100+ başka tür var; büyük bir belediye
+// (ör. Tilburg) için hepsini çekmek tek ay/tek belediyede 10.000 satır limitini
+// aşıp API'nin "query not allowed" hatasıyla HTTP 500 dönmesine yol açıyordu.
+// NOT: SoortMisdrijf alanındaki değerler API'de SONDA BOŞLUKLU geliyor (ör.
+// "1.4.1 "), bu yüzden `eq` değil `startswith` kullanılıyor.
+const CRIME_CODES = Object.keys(CRIME_CLASSES);
 async function fetchCrimeForPeriod(period, prefixes) {
+  const crimeFilter = CRIME_CODES.map((c) => `startswith(SoortMisdrijf,'${c}')`).join(" or ");
   const rows = [];
   for (const prefix of prefixes) {
-    const filter = encodeURIComponent(`startswith(WijkenEnBuurten,'${prefix}') and Perioden eq '${period}'`);
+    const filter = encodeURIComponent(
+      `startswith(WijkenEnBuurten,'${prefix}') and Perioden eq '${period}' and (${crimeFilter})`
+    );
     const url = `${POLITIE_ODATA}/TypedDataSet?$filter=${filter}&$format=json`;
     const data = await getJson(url);
     rows.push(...(data.value || []));
